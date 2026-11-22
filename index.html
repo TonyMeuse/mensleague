@@ -214,20 +214,46 @@ function drawNames(q){
 async function pickName(id){
   me=id||'none'; put('ml.me.'+slug,me);
   // move this phone's alerts to the new name
-  try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();
+  try{ const reg=await swReady(); const sub=await reg.pushManager.getSubscription();
        if(sub && id) await sb.rpc('save_push_sub',{s:slug,pw,golfer:id,sub:sub.toJSON()}); }catch(e){}
-  tab='results'; draw();
+  tab='results';
+  if(id && !get('ml.asked.'+slug) && (await alertState())==='off') return showAskAlerts();
+  draw();
+}
+// Asked once, the first time a golfer opens the app and picks their name
+function showAskAlerts(){
+  put('ml.asked.'+slug,'1');
+  $('tabs').style.display='none';
+  $('app').innerHTML=`<div class="card center" style="margin-top:24px;padding:24px 18px">
+      <div style="font-size:4rem;line-height:1">🔔</div>
+      <h2 style="font-size:1.5rem">Get a message when results are posted?</h2>
+      <p style="font-size:1.15rem">We'll let you know on this phone as soon as the results are up for a week you played.</p>
+      <button class="btn" style="font-size:1.3rem;padding:20px" onclick="askYes()">🔔 Yes, turn on alerts</button><br>
+      <button class="btn ghost" onclick="draw()">Not now</button>
+      <p class="muted" style="margin-bottom:0">You can turn alerts on or off any time with the <b>🔔</b> button at the top of the screen.</p></div>`;
+}
+async function askYes(){ await alertsOn(); draw(); }
+function showAlertsScreen(){
+  $('app').innerHTML=`<h2>🔔 Alerts</h2><div class="card" id="alerts"><p class="muted">Checking…</p></div>
+    <button class="btn ghost" onclick="draw()">◀ Back</button>`;
+  drawAlerts(); scrollTo(0,0);
+}
+async function updateBell(){
+  const b=$('bell'); if(!b) return; const st=await alertState();
+  b.textContent=st==='on'?'🔔 On':'🔕 Off';
 }
 
 /* ---------- main screens ---------- */
 function draw(){
-  $('hdrBtn').innerHTML=(canInstall()?`<button onclick="showInstall()" style="background:#fff;color:var(--green);margin-right:6px">📲 Get App</button>`:'')+`<button onclick="showPickName()">${me&&me!=='none'?esc(myName().split(' ')[0])+' ▾':'Pick name'}</button>`;
+  $('hdrBtn').innerHTML=(canInstall()?`<button onclick="showInstall()" style="background:#fff;color:var(--green);margin-right:6px">📲 Get App</button>`:'')
+    +(me&&me!=='none'?`<button id="bell" onclick="showAlertsScreen()" style="margin-right:6px">🔔</button>`:'')
+    +`<button onclick="showPickName()">${me&&me!=='none'?esc(myName().split(' ')[0])+' ▾':'Pick name'}</button>`;
+  updateBell();
   const T=[['results','🏆','Results'],['money','💰','Money List'],['me','📊','My Stats']];
   $('tabs').style.display='flex';
   $('tabs').innerHTML=T.map(([k,i,l])=>`<button class="${tab===k?'on':''}" onclick="tab='${k}';draw();scrollTo(0,0)"><span>${i}</span>${l}</button>`).join('');
   $('app').innerHTML={results:rResults,money:rMoney,me:rMe}[tab]();
-  if(tab==='me') drawAlerts();
-  else if(tab==='results' && me!=='none') alertBanner();
+  if(tab==='results' && me!=='none') alertBanner();
 }
 
 function rResults(){
@@ -317,18 +343,20 @@ function rMe(){
     <div class="grid3" style="margin-top:16px">${[3,4,5].map(p=>`<div class="tile"><div class="muted">Avg on par ${p}s</div><b>${one(avg(byPar[p]))}</b></div>`).join('')}</div></div>
   <h2>My rounds</h2><div class="card">${rounds.length?`<table><tr><th>Date</th><th class="num">Gross</th><th class="num">Net</th><th class="num">Won</th></tr>
     ${[...rounds].reverse().map(r=>`<tr><td>${fmtDate(r.date)}</td><td class="num">${r.gross??'—'}</td><td class="num">${r.net??'—'}</td><td class="num money">${r.pay.total>0.004?money(r.pay.total):''}</td></tr>`).join('')}</table>`:'<p class="muted">No rounds yet.</p>'}</div>
-  <h2>Alerts</h2><div class="card" id="alerts"><p class="muted">Checking…</p></div>
   <button class="btn ghost" onclick="showPickName()">Not ${esc(myName().split(' ')[0])}? Change name</button>`;
 }
 
 /* ---------- phone alerts ---------- */
+// The background helper that receives alerts; give up after a few seconds instead of waiting forever
+function swReady(){ if(!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return Promise.race([navigator.serviceWorker.ready, new Promise(r=>setTimeout(()=>r(null),4000))]); }
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 async function alertState(){
   if(isIOS && !isStandalone()) return 'needs-home';
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!cfg.vapidPublicKey) return 'unsupported';
   if(Notification.permission==='denied') return 'blocked';
-  try{ const reg=await navigator.serviceWorker.ready; return (await reg.pushManager.getSubscription())?'on':'off'; }catch(e){ return 'off'; }
+  try{ const reg=await swReady(); return (await reg.pushManager.getSubscription())?'on':'off'; }catch(e){ return 'off'; }
 }
 async function drawAlerts(){
   const el=$('alerts'); if(!el) return; const s=await alertState();
@@ -336,30 +364,30 @@ async function drawAlerts(){
     'on':`<p style="margin-top:0">✅ Alerts are <b>on</b>. You'll get a message when results are posted for a week you played.</p><button class="btn ghost" onclick="alertsOff()">Turn Alerts Off</button>`,
     'off':`<p style="margin-top:0">Get a message on this phone when results are posted for a week you played.</p><button class="btn" onclick="alertsOn()">🔔 Turn On Alerts</button>`,
     'blocked':`<p style="margin:0">Alerts are blocked on this phone. To allow them, open your phone's <b>Settings → Notifications → League</b> and turn on <b>Allow Notifications</b>.</p>`,
-    'needs-home':`<p style="margin-top:0">To get alerts on iPhone, add this app to your Home Screen first:</p><ol style="margin:0;padding-left:22px;line-height:1.7"><li>Tap the <b>Share</b> button <b>⬆︎</b> at the bottom of Safari</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b></li><li>Open <b>League</b> from your Home Screen and come back here</li></ol>`,
+    'needs-home':`<p style="margin-top:0;font-size:1.1rem">To get alerts on an iPhone, the app must be on your <b>Home Screen</b> first.</p><button class="btn" onclick="showInstall()">📲 Show me how</button>`,
     'unsupported':`<p style="margin:0" class="muted">This phone or browser can't receive alerts. Try Safari on iPhone or Chrome on Android.</p>`
   }[s];
 }
 async function alertBanner(){
   const el=$('alertBanner'); if(!el) return; const s=await alertState();
-  if(s==='off'||s==='needs-home') el.innerHTML=`<div class="card" style="display:flex;gap:10px;align-items:center"><span style="flex:1">🔔 Want a message when results are posted?</span><button class="btn" style="width:auto;padding:10px 14px;font-size:1rem" onclick="tab='me';draw();setTimeout(()=>$('alerts').scrollIntoView({behavior:'smooth'}),50)">Set up</button></div>`;
+  if(s==='off'||s==='needs-home') el.innerHTML=`<div class="card" style="display:flex;gap:10px;align-items:center"><span style="flex:1">🔔 Want a message when results are posted?</span><button class="btn" style="width:auto;padding:10px 14px;font-size:1rem" onclick="showAlertsScreen()">Set up</button></div>`;
 }
 function b64u(s){ const p='='.repeat((4-s.length%4)%4), b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from(b,c=>c.charCodeAt(0)); }
 async function alertsOn(){
   try{
     const perm=await Notification.requestPermission();
     if(perm!=='granted') return drawAlerts();
-    const reg=await navigator.serviceWorker.ready;
+    const reg=await swReady();
     const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(cfg.vapidPublicKey)});
     const {error}=await sb.rpc('save_push_sub',{s:slug,pw,golfer:me,sub:sub.toJSON()});
     if(error) throw error;
   }catch(e){ console.error(e); alert('Could not turn on alerts. Please try again.'); }
-  drawAlerts();
+  drawAlerts(); updateBell();
 }
 async function alertsOff(){
-  try{ const reg=await navigator.serviceWorker.ready, sub=await reg.pushManager.getSubscription();
+  try{ const reg=await swReady(), sub=await reg.pushManager.getSubscription();
     if(sub){ await sb.rpc('remove_push_sub',{s:slug,pw,endpoint:sub.endpoint}); await sub.unsubscribe(); } }catch(e){ console.error(e); }
-  drawAlerts();
+  drawAlerts(); updateBell();
 }
 </script>
 </body>
