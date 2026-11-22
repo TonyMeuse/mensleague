@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122110751';</script>
+<script>window.APP_VERSION='20261122112515';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -361,7 +361,6 @@ function rCheckin(){
     <div><label>League date</label><input type="date" value="${w.date}" onchange="db.week.date=this.value;save();render()"></div>
     <div><label>Course</label><select onchange="db.week.courseId=this.value;save();render()">${db.courses.map(c=>`<option value="${c.id}" ${c.id===w.courseId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div style="flex:1"></div>
-    <button class="btn danger" onclick="newWeekConfirm()">Start New Week</button>
   </div></div>
   <div class="card">
     <div class="stat"><span class="muted">Playing</span><b>${n}</b></div>
@@ -376,6 +375,11 @@ function rCheckin(){
   ${[...ps].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${showIndex(p.index)}</td><td class="num"><input inputmode="numeric" style="width:90px;text-align:center;min-height:44px;padding:6px;${p.chOverride?'border-color:var(--gold);font-weight:700':''}" value="${p.chOverride?showStrokes(p.ch):''}" placeholder="${showStrokes(p.chCalc)}" title="Strokes this week. Leave blank to use the handicap." onchange="setStrokes('${p.id}',this.value)"></td>
     <td><button class="btn small ${p.skins?'':'ghost'}" onclick="toggleSkins('${p.id}')">${p.skins?'✓ In skins':'Not in skins'}</button></td>
     <td><button class="btn small danger" onclick="togglePlay('${p.id}')">Remove</button></td></tr>`).join('')}</table></div>`:'<p class="muted">Nobody checked in yet.</p>'}
+  ${n||Object.keys(db.week.scores||{}).length?`<div class="card" style="margin-top:30px;border-style:dashed">
+    <h3 style="margin-top:0">Need to start over?</h3>
+    <p class="muted">You don't need this on a normal night: after you <b>Publish</b>, the program offers to start the next week for you.
+      Use this only to wipe this week's check-in and scores, for example if you set up the wrong week.</p>
+    <button class="btn danger" onclick="newWeekConfirm()">Clear this week and start over</button></div>`:''}
   `;
 }
 function gridHTML(){
@@ -394,8 +398,8 @@ function setStrokes(id,v){ v=String(v).trim(); const wp=db.week.players[id];
 function toggleSkins(id){ db.week.players[id].skins=!db.week.players[id].skins; save(); render(); }
 function newWeekConfirm(){
   const hasScores=Object.values(db.week.scores).some(a=>a&&a.some(v=>v));
-  if(hasScores && !confirm('This week has scores that have NOT been published. Start a new week anyway and lose them?')) return;
-  if(!hasScores && !confirm('Clear the check-in list and start a new week?')) return;
+  const n=Object.keys(db.week.players).length;
+  if(!confirm(`Clear this week and start over?\n\nThis removes all ${n} golfer${n===1?'':'s'} from Check-In`+(hasScores?' and ERASES all the scores entered this week (they have not been published).':'.')+`\n\nThis cannot be undone.`)) return;
   db.week=newWeek(db.week.courseId||(db.courses[0]||{}).id); state.scoreId=null; save(); render();
 }
 
