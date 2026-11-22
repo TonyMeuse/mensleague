@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122092720';</script>
+<script>window.APP_VERSION='20261122093443';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -556,7 +556,7 @@ function rRoster(){
     <button class="btn big" onclick="addGolfer()">+ Add Golfer</button></div>
     <p class="muted" style="margin-bottom:0">For a plus handicap, type a + sign, e.g. <b>+2.1</b></p></div>
   <details class="card"><summary style="font-size:1.1rem;font-weight:700;cursor:pointer">Add many golfers at once (paste a list)</summary>
-    <p class="muted">One golfer per line: name, then a comma, then the index. Example: <b>John Smith, 12.4</b></p>
+    <p class="muted">One golfer per line: name, then a comma, then the index. Example: <b>John Smith, 12.4</b>. Golfers already on the roster get their index updated.</p>
     <textarea id="bulk"></textarea><br><br><button class="btn" onclick="bulkAdd()">Add These Golfers</button></details>
   <h2>Roster (${list.length} golfers)</h2>
   <div class="card"><input style="width:100%;margin-bottom:10px" placeholder="🔍  Find a golfer…" oninput="filterRoster(this.value)">
@@ -574,13 +574,26 @@ function addGolfer(){
   if(db.golfers.some(g=>g.name.toLowerCase()===n.toLowerCase()) && !confirm(n+' is already on the roster. Add anyway?')) return;
   db.golfers.push({id:uid('g'),name:n,index:idx,active:true}); save(); render(); document.getElementById('newName').focus();
 }
+// Paste a list: "Name, index" per line. Names already on the roster get their index updated (no duplicates).
+// A line with no index (e.g. "Jayden Deveau,") adds the golfer with a blank handicap.
 function bulkAdd(){
-  const lines=document.getElementById('bulk').value.split('\n').map(l=>l.trim()).filter(Boolean); let added=0, bad=[];
-  for(const l of lines){ const m=l.match(/^(.*?)[,\t ]+([+]?-?\d+(\.\d+)?)\s*$/); if(!m){bad.push(l);continue;}
-    db.golfers.push({id:uid('g'),name:m[1].replace(/[,\t]+$/,'').trim(),index:parseIndex(m[2]),active:true}); added++; }
-  save(); render(); alert(`Added ${added} golfer(s).`+(bad.length?`\n\nCould not read these lines:\n${bad.join('\n')}`:''));
+  const lines=document.getElementById('bulk').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  let added=0, updated=0, bad=[];
+  for(const l of lines){
+    const cut=Math.max(l.lastIndexOf(','),l.lastIndexOf('\t'));
+    let name=l, idx=null;
+    if(cut>=0){ name=l.slice(0,cut).trim(); const t=l.slice(cut+1).trim();
+      if(t!==''){ idx=parseIndex(t); if(idx==null){ bad.push(l); continue; } } }
+    else { const m=l.match(/^(.*\S)\s+([+]?-?\d+(\.\d+)?)$/); if(m){ name=m[1]; idx=parseIndex(m[2]); } }
+    name=name.replace(/\s+/g,' ').trim(); if(!name){ bad.push(l); continue; }
+    const g=db.golfers.find(x=>x.name.toLowerCase()===name.toLowerCase());
+    if(g){ if(idx!=null) g.index=idx; updated++; }
+    else { db.golfers.push({id:uid('g'),name,index:idx,active:true}); added++; }
+  }
+  save(); render();
+  alert(`Added ${added} golfer(s).`+(updated?` Updated ${updated} already on the roster.`:'')+(bad.length?`\n\nCould not read these lines:\n${bad.join('\n')}`:''));
 }
-function editGolfer(id,k,v){ const g=golfer(id); if(k==='name'){ if(!v.trim()) return render(); g.name=v.trim(); } else { const n=parseIndex(v); if(n==null){alert('Please type a number like 12.4');return render();} g.index=n; } save(); render(); }
+function editGolfer(id,k,v){ const g=golfer(id); if(k==='name'){ if(!v.trim()) return render(); g.name=v.trim(); } else { const n=parseIndex(v); if(n==null && String(v).trim()!==''){alert('Please type a number like 12.4');return render();} g.index=n; } save(); render(); }
 function delGolfer(id){ const g=golfer(id); if(!confirm(`Delete ${g.name} from the roster?`)) return; db.golfers=db.golfers.filter(x=>x.id!==id); delete db.week.players[id]; save(); render(); }
 
 /* ======================= HISTORY ======================= */
