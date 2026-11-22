@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122114308';</script>
+<script>window.APP_VERSION='20261122123807';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -144,7 +144,7 @@ function uid(p){return p+Date.now().toString(36)+Math.random().toString(36).slic
 function newWeek(courseId){return {date:todayStr(),courseId:courseId||null,players:{},flights:null,flightsKey:'',scores:{}}}
 function defaultDB(){return {
   golfers:[], courses:[], history:[],
-  settings:{entryFee:20, roundFee:10, skinsFee:5, par3Fee:1, hcpMethod:'course', tieRule:'cardoff', mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
+  settings:{ggid:'', entryFee:20, roundFee:10, skinsFee:5, par3Fee:1, hcpMethod:'course', tieRule:'cardoff', mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
   week:newWeek(null)
 }}
 /* Everything is stored online in Supabase (one record holds the whole league). */
@@ -577,7 +577,13 @@ async function signOut(){ if(dirty) await flush(); await sb.auth.signOut(); loca
 function rRoster(){
   const c=getCourse(db.week.courseId);
   const list=[...db.golfers].sort((a,b)=>a.name.localeCompare(b.name));
-  return `<div class="card"><h3>Add a golfer</h3><div class="row">
+  const s=db.settings;
+  return `<div class="card" style="border:2px solid var(--green)"><h3>Golf Canada handicaps</h3>
+    <p class="muted" style="margin-top:0">Gets every golfer's current handicap from your league's Golf Genius page. Do this each week before check-in.</p>
+    <div class="row"><div><label>Golf Genius GGID</label><input id="ggid" style="width:170px;text-transform:uppercase" value="${esc(s.ggid||'')}" placeholder="e.g. BDT9TL" onchange="db.settings.ggid=this.value.trim().toUpperCase();save()"></div>
+      <button class="btn big" onclick="updateFromGG()">🔄 Update handicaps from Golf Genius</button></div>
+    ${s.ggUpdatedAt?`<p class="muted" style="margin-bottom:0">Last updated ${new Date(s.ggUpdatedAt).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.</p>`:''}</div>
+  <div class="card"><h3>Add a golfer</h3><div class="row">
     <div style="flex:2;min-width:240px"><label>Name</label><input id="newName" style="width:100%" placeholder="First Last" onkeydown="if(event.key==='Enter')document.getElementById('newIdx').focus()"></div>
     <div><label>Handicap index</label><input id="newIdx" style="width:160px" placeholder="e.g. 12.4" onkeydown="if(event.key==='Enter')addGolfer()"></div>
     <button class="btn big" onclick="addGolfer()">+ Add Golfer</button></div>
@@ -592,6 +598,35 @@ function rRoster(){
     <td><input value="${showIndex(g.index)==='—'?'':showIndex(g.index)}" style="width:120px" onchange="editGolfer('${g.id}','index',this.value)"></td>
     ${c?`<td class="num">${courseHcp(g.index,c)}</td>`:''}
     <td><button class="btn small danger" onclick="delGolfer('${g.id}')">Delete</button></td></tr>`).join('')}</table></div>`;
+}
+// Pull every golfer's current Golf Canada handicap from the league's Golf Genius roster
+async function updateFromGG(){
+  const code=(document.getElementById('ggid').value||'').trim().toUpperCase();
+  if(!code) return alert('Please type your league\'s Golf Genius GGID first (for example BDT9TL).');
+  db.settings.ggid=code;
+  const hasScores=Object.values(db.week.scores||{}).some(a=>a&&a.some(v=>v));
+  if(hasScores && !confirm('Scores have already been entered this week.\n\nUpdating handicaps now will change this week\'s strokes and net results. Update anyway?')) return;
+  busy('Getting handicaps from Golf Genius…');
+  const {data,error}=await sb.functions.invoke('gg-handicaps',{body:{leagueId:league.id,ggid:code}});
+  if(error||!data||data.error){ let msg=data&&data.error; try{ msg=msg||(await error.context.json()).error; }catch(e){}
+    render(); return alert('Could not get the handicaps from Golf Genius.\n\n'+(msg||'Please check the internet connection and try again.')); }
+  const norm=n=>n.toLowerCase().replace(/\s*\(.*?\)\s*/g,' ').replace(/\s+/g,' ').trim();
+  let changed=[], same=0; const missing=[];
+  for(const p of data.players){
+    const g=db.golfers.find(x=>x.name.toLowerCase()===p.name.toLowerCase())||db.golfers.find(x=>norm(x.name)===norm(p.name));
+    const idx=p.index===''?null:parseIndex(p.index);
+    if(!g){ missing.push({name:p.name,index:idx}); continue; }
+    if((g.index??null)!==idx){ changed.push(`${g.name}: ${showIndex(g.index)} → ${showIndex(idx)}`); g.index=idx; } else same++;
+  }
+  const onlyHere=db.golfers.filter(g=>!data.players.some(p=>p.name.toLowerCase()===g.name.toLowerCase()||norm(p.name)===norm(g.name))).map(g=>g.name);
+  db.settings.ggUpdatedAt=Date.now(); db.week.flightsKey=''; save(); render();
+  let msg=`Handicaps updated from Golf Genius.\n\n${changed.length} changed, ${same} already up to date.`;
+  if(changed.length) msg+='\n\n'+changed.slice(0,25).join('\n')+(changed.length>25?`\n…and ${changed.length-25} more`:'');
+  if(onlyHere.length) msg+=`\n\nNot on the Golf Genius roster (left as they are): ${onlyHere.join(', ')}`;
+  alert(msg);
+  if(missing.length && confirm(`${missing.length} golfer(s) on Golf Genius are not on your roster:\n\n${missing.map(m=>m.name).join('\n')}\n\nAdd them?`)){
+    missing.forEach(m=>db.golfers.push({id:uid('g'),name:m.name,index:m.index,active:true})); save(); render();
+  }
 }
 function filterRoster(q){ q=q.toLowerCase(); document.querySelectorAll('#rosterTable tr[data-name]').forEach(tr=>tr.style.display=tr.dataset.name.includes(q)?'':'none'); }
 function addGolfer(){
