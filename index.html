@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script>window.APP_VERSION='20261122110028';</script>
+<script>window.APP_VERSION='20261122110131';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -31,9 +31,8 @@
   .tabs button span{font-size:1.5rem}
   .tabs button.on{color:var(--green)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;overflow-x:auto}
-  table.tight th,table.tight td{padding:9px 3px;font-size:.92rem}
-  table.tight th{white-space:nowrap;font-size:.72rem}
-  table.tight td:first-child{padding-left:0}
+  .card.wide{margin-left:-12px;margin-right:-12px;padding:14px 10px}   /* reaches nearly to the screen edges */
+  .card.wide th{white-space:nowrap}
   h2{font-size:1.25rem;margin:18px 0 10px}
   h3{font-size:1.05rem;margin:0 0 8px}
   .btn{display:block;width:100%;font-size:1.15rem;font-weight:700;padding:16px;border-radius:14px;border:2px solid var(--green);background:var(--green);color:#fff;font-family:inherit}
@@ -277,7 +276,7 @@ function rResults(){
       ${aw?`<p style="margin:10px 0 0">🏆 ${aw.place} ${aw.cat}</p>`:''}</div>`;
   }
   const pays=Object.entries(r.payouts).map(([id,p])=>({id,...p})).filter(p=>p.total>0.004).sort((a,b)=>b.total-a.total);
-  h+=`<h2>Who won money</h2><div class="card"><table class="tight"><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
+  h+=`<h2>Who won money</h2><div class="card wide"><table><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
     ${pays.map(p=>`<tr class="${p.id===me?'me':''}"><td>${esc(p.name)}</td><td class="num">${p.round?moneyS(p.round):''}</td><td class="num">${p.skins?moneyS(p.skins):''}</td><td class="num">${p.par3?moneyS(p.par3):''}</td><td class="num money">${moneyS(p.total)}</td></tr>`).join('')}</table></div>`;
   h+=`<h2>Par 3 skins</h2><div class="card"><table>${r.par3.map(p=>`<tr class="${p.winner===me?'me':''}"><td><b>#${p.hole}</b></td><td>${p.winner?`${esc(p.winnerName)} (${p.low})`:`<span class="muted">Tied – rolls over</span>`}</td><td class="num money">${money(p.pot)}</td></tr>`).join('')}</table>
     ${r.rollover>0.004?`<p class="muted" style="margin-bottom:0">${money(r.rollover)} rolls over to next week.</p>`:''}</div>`;
