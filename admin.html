@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122112515';</script>
+<script>window.APP_VERSION='20261122112738';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -358,7 +358,8 @@ function rCheckin(){
   const sizes=n?makeFlights(ps).map(f=>f.length).join(' / '):'';
   return `
   <div class="card"><div class="row">
-    <div><label>League date</label><input type="date" value="${w.date}" onchange="db.week.date=this.value;save();render()"></div>
+    <div><label>League night</label><input type="date" value="${w.date}" onchange="db.week.date=this.value;save();render()"></div>
+    <div style="align-self:center;font-size:1.25rem;font-weight:800;padding-top:18px">${fmtDate(w.date)}</div>
     <div><label>Course</label><select onchange="db.week.courseId=this.value;save();render()">${db.courses.map(c=>`<option value="${c.id}" ${c.id===w.courseId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div style="flex:1"></div>
   </div></div>
@@ -375,11 +376,6 @@ function rCheckin(){
   ${[...ps].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${showIndex(p.index)}</td><td class="num"><input inputmode="numeric" style="width:90px;text-align:center;min-height:44px;padding:6px;${p.chOverride?'border-color:var(--gold);font-weight:700':''}" value="${p.chOverride?showStrokes(p.ch):''}" placeholder="${showStrokes(p.chCalc)}" title="Strokes this week. Leave blank to use the handicap." onchange="setStrokes('${p.id}',this.value)"></td>
     <td><button class="btn small ${p.skins?'':'ghost'}" onclick="toggleSkins('${p.id}')">${p.skins?'✓ In skins':'Not in skins'}</button></td>
     <td><button class="btn small danger" onclick="togglePlay('${p.id}')">Remove</button></td></tr>`).join('')}</table></div>`:'<p class="muted">Nobody checked in yet.</p>'}
-  ${n||Object.keys(db.week.scores||{}).length?`<div class="card" style="margin-top:30px;border-style:dashed">
-    <h3 style="margin-top:0">Need to start over?</h3>
-    <p class="muted">You don't need this on a normal night: after you <b>Publish</b>, the program offers to start the next week for you.
-      Use this only to wipe this week's check-in and scores, for example if you set up the wrong week.</p>
-    <button class="btn danger" onclick="newWeekConfirm()">Clear this week and start over</button></div>`:''}
   `;
 }
 function gridHTML(){
@@ -396,11 +392,12 @@ function setStrokes(id,v){ v=String(v).trim(); const wp=db.week.players[id];
   if(v===''){ delete wp.ch; } else { const n=parseIndex(v); if(n==null) return alert('Please type a number of strokes, like 12 (or +2 for a plus handicap).'); wp.ch=Math.round(n); }
   db.week.flightsKey=''; save(); render(); }
 function toggleSkins(id){ db.week.players[id].skins=!db.week.players[id].skins; save(); render(); }
-function newWeekConfirm(){
+function clearWeekConfirm(){
   const hasScores=Object.values(db.week.scores).some(a=>a&&a.some(v=>v));
   const n=Object.keys(db.week.players).length;
-  if(!confirm(`Clear this week and start over?\n\nThis removes all ${n} golfer${n===1?'':'s'} from Check-In`+(hasScores?' and ERASES all the scores entered this week (they have not been published).':'.')+`\n\nThis cannot be undone.`)) return;
-  db.week=newWeek(db.week.courseId||(db.courses[0]||{}).id); state.scoreId=null; save(); render();
+  if(!confirm(`Clear this week?\n\nThis removes all ${n} golfer${n===1?'':'s'} from Check-In`+(hasScores?' and ERASES all the scores entered this week (they have not been published).':'.')+`\n\nThis cannot be undone.`)) return;
+  const keepDate=db.week.date; db.week=newWeek(db.week.courseId||(db.courses[0]||{}).id); db.week.date=keepDate; state.scoreId=null; save(); render();
+  alert('This week has been cleared. Check-In is empty.');
 }
 
 /* ======================= FLIGHTS ======================= */
@@ -543,9 +540,16 @@ async function publishWeek(){
     if(error) { console.error(error); msg+='\n\nThe phone alerts could not be sent this time.'; }
     else msg+=`\n\nAlert sent to ${data.sent} phone${data.sent===1?'':'s'}.`+(Object.keys(players).length>data.sent?` (Golfers who haven't turned on alerts won't get one.)`:'');
   }
-  render();
-  alert(msg);
-  if(confirm('Start a fresh week now? (This clears check-in and scores.)')){ db.week=newWeek(db.week.courseId); state.scoreId=null; save(); go('history'); }
+  // The next league night is set up automatically: one week after the latest published week
+  const next=nextLeagueDate();
+  db.week=newWeek(db.week.courseId); db.week.date=next; state.scoreId=null; save();
+  go('history');
+  alert(msg+`\n\nThe next league night (${fmtDate(next)}) is ready on Check-In.`);
+}
+function nextLeagueDate(){
+  const last=sortedHistory().map(h=>h.date).pop()||db.week.date;
+  const [y,m,d]=last.split('-').map(Number), t=new Date(y,m-1,d+7);
+  return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
 }
 function printQR(){
   const box=document.getElementById('qrbox'); box.innerHTML='';
@@ -694,6 +698,9 @@ function rSettings(){
   <h2>Back up &amp; restore</h2><div class="card"><p class="muted" style="margin-top:0">Everything is saved online automatically. A backup file is extra safety: make one now and then and keep it on a USB stick or in your email.</p>
     <div class="row"><button class="btn big" onclick="backup()">⬇ Back Up Data</button>
     <label class="btn big ghost" style="display:inline-flex;align-items:center;margin:0;color:var(--green);font-size:1.3rem">⬆ Restore From Backup<input type="file" accept=".json,application/json" style="display:none" onchange="restore(this)"></label></div></div>
+  <h2>Clear this week</h2><div class="card"><p class="muted" style="margin-top:0">Not needed on a normal night: publishing the results starts the next week automatically.
+    Only use this if this week was set up wrong and you want to remove everyone from Check-In and erase this week's scores.</p>
+    <button class="btn danger" onclick="clearWeekConfirm()">Clear this week</button></div>
   <h2>Account</h2><div class="card"><p class="muted" style="margin-top:0">You are working on <b style="color:var(--ink)">${esc(league.name)}</b>.</p>
     <div class="row"><button class="btn big ghost" onclick="switchLeague()">Switch League / Create Another</button><button class="btn big danger" onclick="signOut()">Sign Out</button></div></div>`;
 }
