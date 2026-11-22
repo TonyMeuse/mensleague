@@ -49,6 +49,11 @@ alter table public.published_weeks enable row level security;
 alter table public.public_roster   enable row level security;
 alter table public.push_subs       enable row level security;
 
+-- Table access through the website (rules below still decide who sees what)
+grant select, insert, update, delete on public.league_state, public.published_weeks, public.public_roster to authenticated;
+grant select on public.push_subs to authenticated;
+grant all on public.admins, public.league_state, public.league_secret, public.published_weeks, public.public_roster, public.push_subs to service_role;
+
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.admins where user_id = auth.uid());
@@ -115,3 +120,11 @@ begin
   if not public.league_pw_ok(pw) then raise exception 'wrong password' using errcode = '28P01'; end if;
   delete from public.push_subs p where p.endpoint = remove_push_sub.endpoint;
 end $$;
+
+-- Who may run each function
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.claim_admin() to authenticated;
+grant execute on function public.set_league_password(text) to authenticated;
+grant execute on function public.get_league_data(text) to anon, authenticated;
+grant execute on function public.save_push_sub(text, text, jsonb) to anon, authenticated;
+grant execute on function public.remove_push_sub(text, text) to anon, authenticated;
