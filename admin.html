@@ -130,7 +130,7 @@ function uid(p){return p+Date.now().toString(36)+Math.random().toString(36).slic
 function newWeek(courseId){return {date:todayStr(),courseId:courseId||null,players:{},flights:null,flightsKey:'',scores:{}}}
 function defaultDB(){return {
   golfers:[], courses:[], history:[],
-  settings:{roundFee:20, skinsFee:10, mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
+  settings:{roundFee:20, skinsFee:10, hcpMethod:'index', mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
   week:newWeek(null)
 }}
 /* Everything is stored online in Supabase (one record holds the whole league). */
@@ -181,7 +181,13 @@ const getCourse=id=>db.courses.find(c=>c.id===id);
 const coursePar=c=>c.pars.reduce((a,b)=>a+b,0);
 function parseIndex(v){ v=String(v).trim(); if(v==='') return null; const plus=v.startsWith('+'); const n=parseFloat(v.replace('+','')); if(isNaN(n)) return null; return plus?-n:n; }
 function showIndex(n){ if(n==null) return '—'; return n<0?'+'+(-n).toFixed(1):(+n).toFixed(1); }
-function courseHcp(index,c){ if(!c||index==null) return 0; return Math.round(index*c.slope/113 + (c.rating - coursePar(c))); }
+// Strokes a golfer gets. League setting: subtract the Golf Canada handicap as-is (rounded),
+// or convert it to a course handicap with slope and rating (World Handicap System formula).
+function courseHcp(index,c){
+  if(index==null) return 0;
+  if(db.settings.hcpMethod!=='course' || !c) return Math.round(index);
+  return Math.round(index*c.slope/113 + (c.rating - coursePar(c)));
+}
 function fmtDate(s){ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
 
 function weekPlayers(){
@@ -335,7 +341,7 @@ function rCheckin(){
   <input id="search" style="width:100%" placeholder="🔍  Type a name to find a golfer…" value="${esc(state.search)}" oninput="state.search=this.value;drawGrid()">
   <div id="grid" class="namegrid">${gridHTML()}</div>
   <h2>Playing this week (${n})</h2>
-  ${n?`<div class="card"><table><tr><th>Name</th><th class="num">Index</th><th class="num">Course Hcp</th><th>Skins</th><th></th></tr>
+  ${n?`<div class="card"><table><tr><th>Name</th><th class="num">Index</th><th class="num">Strokes</th><th>Skins</th><th></th></tr>
   ${[...ps].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${showIndex(p.index)}</td><td class="num">${p.ch}</td>
     <td><button class="btn small ${p.skins?'':'ghost'}" onclick="toggleSkins('${p.id}')">${p.skins?'✓ In skins':'Not in skins'}</button></td>
     <td><button class="btn small danger" onclick="togglePlay('${p.id}')">Remove</button></td></tr>`).join('')}</table></div>`:'<p class="muted">Nobody checked in yet.</p>'}
@@ -362,7 +368,7 @@ function rFlights(){
   if(!db.courses.length) return needCourse();
   const ps=weekPlayers(); if(!ps.length) return `<div class="card empty">Nobody is checked in yet.<br><br><button class="btn big" onclick="go('checkin')">Go to Check-In</button></div>`;
   const P=Object.fromEntries(ps.map(p=>[p.id,p])), fl=ensureFlights();
-  return `<div class="row noprint" style="margin-bottom:16px"><p class="muted" style="flex:1;margin:0">Flights are made by course handicap, lowest in Flight A. Use ▲ ▼ to move a golfer to another flight.</p>
+  return `<div class="row noprint" style="margin-bottom:16px"><p class="muted" style="flex:1;margin:0">Flights are made by handicap, lowest in Flight A. Use ▲ ▼ to move a golfer to another flight.</p>
     <button class="btn ghost" onclick="if(confirm('Re-make flights by handicap? Any manual moves will be undone.')){ensureFlights(true);render()}">Re-make Flights</button>
     <button class="btn" onclick="window.print()">Print</button></div>
   <div class="flights">${fl.map((ids,fi)=>`<div class="card flight"><h3><span>Flight ${String.fromCharCode(65+fi)}</span><span class="muted">${ids.length} players</span></h3>
@@ -393,7 +399,7 @@ function rScores(){
   const idx=order.indexOf(p.id);
   return `<div class="scoreLayout"><div class="plist card">${list}</div>
   <div><div class="card">
-    <h2 style="margin-top:0">${esc(p.name)} <span class="muted" style="font-size:1rem">Course handicap ${p.ch} · ${p.skins?'In skins':'Not in skins'}</span></h2>
+    <h2 style="margin-top:0">${esc(p.name)} <span class="muted" style="font-size:1rem">Strokes: ${p.ch} · ${p.skins?'In skins':'Not in skins'}</span></h2>
     <div class="card-grid">${half(0,'Out')}</div>
     <div class="card-grid">${half(9,'In')}</div>
     <p class="muted" style="margin:0">Gold boxes are par 3s. Type a score and it jumps to the next hole (for a 1 on a hole, press Tab).</p>
@@ -532,7 +538,7 @@ function rRoster(){
     <textarea id="bulk"></textarea><br><br><button class="btn" onclick="bulkAdd()">Add These Golfers</button></details>
   <h2>Roster (${list.length} golfers)</h2>
   <div class="card"><input style="width:100%;margin-bottom:10px" placeholder="🔍  Find a golfer…" oninput="filterRoster(this.value)">
-  <table id="rosterTable"><tr><th>Name</th><th>Handicap index</th>${c?`<th class="num">Course Hcp</th>`:''}<th></th></tr>
+  <table id="rosterTable"><tr><th>Name</th><th>Handicap index</th>${c?`<th class="num">Strokes</th>`:''}<th></th></tr>
   ${list.map(g=>`<tr data-name="${esc(g.name.toLowerCase())}"><td style="display:flex;gap:8px;align-items:center"><input value="${esc(g.name)}" style="flex:1" onchange="editGolfer('${g.id}','name',this.value)">${g.test?'<span class="pill no">TEST</span>':''}</td>
     <td><input value="${showIndex(g.index)==='—'?'':showIndex(g.index)}" style="width:120px" onchange="editGolfer('${g.id}','index',this.value)"></td>
     ${c?`<td class="num">${courseHcp(g.index,c)}</td>`:''}
@@ -595,6 +601,11 @@ function rSettings(){
     <div><label>Round fee per player ($)</label><input type="number" min="0" step="1" value="${s.roundFee}" style="width:180px" onchange="setNum('roundFee',this.value)"></div>
     <div><label>Skins fee per player ($)</label><input type="number" min="0" step="1" value="${s.skinsFee}" style="width:180px" onchange="setNum('skinsFee',this.value)"></div></div>
     <p class="muted" style="margin-bottom:0">Round money is paid within each flight. Skins money is split by hole: par 3 holes go to the whole-field par 3 skins (rolls over week to week if tied), the other holes go to each flight's skins.</p></div>
+  <h2>Handicaps</h2><div class="card">
+    <label>How is net score worked out?</label><div class="seg">${[['index','Subtract handicap as-is'],['course','Use course handicap']].map(([k,l])=>`<button class="${(s.hcpMethod||'index')===k?'on':''}" onclick="setHcpMethod('${k}')">${l}</button>`).join('')}</div>
+    <p class="muted" style="margin-bottom:0">${(s.hcpMethod||'index')==='index'
+      ?'Net = score minus the Golf Canada handicap, rounded. Example: handicap 18.4 shoots 92 → net 74.'
+      :'The Golf Canada handicap is converted with your course\'s slope and rating (like the Golf Canada app does) before it is subtracted. Example: handicap 18.0 on slope 125, rating 71.5, par 72 gets 19 strokes.'}</p></div>
   <h2>Prizes</h2><div class="card">
     <label>Pay prizes for</label><div class="seg">${[['gross','Gross only'],['net','Net only'],['both','Gross & Net']].map(([k,l])=>`<button class="${s.mode===k?'on':''}" onclick="db.settings.mode='${k}';save();render()">${l}</button>`).join('')}</div>
     ${s.mode==='both'?'<p class="muted">Each flight\'s round money is split 50/50 between gross and net. A golfer can only win one prize — he gets the one that pays more.</p>':''}
@@ -623,6 +634,7 @@ function rSettings(){
   <h2>Account</h2><div class="card"><p class="muted" style="margin-top:0">You are working on <b style="color:var(--ink)">${esc(league.name)}</b>.</p>
     <div class="row"><button class="btn big ghost" onclick="switchLeague()">Switch League / Create Another</button><button class="btn big danger" onclick="signOut()">Sign Out</button></div></div>`;
 }
+function setHcpMethod(k){ db.settings.hcpMethod=k; if(db.week.flights) db.week.flightsKey=''; save(); render(); }
 function setNum(k,v){ const n=parseFloat(v); if(isNaN(n)||n<0) return alert('Please enter a number.'); db.settings[k]=n; save(); render(); }
 function setPct(i,v){ db.settings.pct[db.settings.places][i]=parseFloat(v)||0; save(); render(); }
 function editCourse(id){
