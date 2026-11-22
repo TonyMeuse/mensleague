@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122112738';</script>
+<script>window.APP_VERSION='20261122114308';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -220,14 +220,17 @@ function weekPlayers(){
 const MAX_FLIGHTS=4;   // the league never uses more than 4 flights
 function flightCount(n){ return n<10?1:Math.min(MAX_FLIGHTS,Math.floor(n/10)); }
 function makeFlights(players){
-  const p=[...players].sort((a,b)=>a.ch-b.ch || (a.index??0)-(b.index??0) || a.name.localeCompare(b.name));
+  // Lowest handicap first; equal strokes are ordered by the more precise index.
+  // Golfers with no handicap yet (and no strokes typed in) go to the last flight, like Golf Genius.
+  const noHcp=x=>x.index==null && !x.chOverride;
+  const p=[...players].sort((a,b)=>noHcp(a)-noHcp(b) || a.ch-b.ch || (a.index??0)-(b.index??0) || a.name.localeCompare(b.name));
   const n=p.length; if(!n) return [];
   const F=flightCount(n), base=Math.floor(n/F), rem=n%F, out=[]; let k=0;
   for(let i=0;i<F;i++){ const size=base+(i<rem?1:0); out.push(p.slice(k,k+size).map(x=>x.id)); k+=size; }
   return out;
 }
 function ensureFlights(force){
-  const ps=weekPlayers(); const key='v3|'+MAX_FLIGHTS+'|'+db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
+  const ps=weekPlayers(); const key='v4|'+MAX_FLIGHTS+'|'+db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
   if(force || !db.week.flights || db.week.flightsKey!==key){ db.week.flights=makeFlights(ps); db.week.flightsKey=key; save(); }
   return db.week.flights;
 }
