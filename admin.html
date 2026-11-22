@@ -539,7 +539,7 @@ function rRoster(){
   <h2>Roster (${list.length} golfers)</h2>
   <div class="card"><input style="width:100%;margin-bottom:10px" placeholder="🔍  Find a golfer…" oninput="filterRoster(this.value)">
   <table id="rosterTable"><tr><th>Name</th><th>Handicap index</th>${c?`<th class="num">Strokes</th>`:''}<th></th></tr>
-  ${list.map(g=>`<tr data-name="${esc(g.name.toLowerCase())}"><td style="display:flex;gap:8px;align-items:center"><input value="${esc(g.name)}" style="flex:1" onchange="editGolfer('${g.id}','name',this.value)">${g.test?'<span class="pill no">TEST</span>':''}</td>
+  ${list.map(g=>`<tr data-name="${esc(g.name.toLowerCase())}"><td style="display:flex;gap:8px;align-items:center"><input value="${esc(g.name)}" style="flex:1" onchange="editGolfer('${g.id}','name',this.value)"><span class="pill no" style="visibility:${g.test?'visible':'hidden'}">TEST</span></td>
     <td><input value="${showIndex(g.index)==='—'?'':showIndex(g.index)}" style="width:120px" onchange="editGolfer('${g.id}','index',this.value)"></td>
     ${c?`<td class="num">${courseHcp(g.index,c)}</td>`:''}
     <td><button class="btn small danger" onclick="delGolfer('${g.id}')">Delete</button></td></tr>`).join('')}</table></div>`;
