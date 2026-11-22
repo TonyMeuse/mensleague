@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122095431';</script>
+<script>window.APP_VERSION='20261122101239';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -144,7 +144,7 @@ function uid(p){return p+Date.now().toString(36)+Math.random().toString(36).slic
 function newWeek(courseId){return {date:todayStr(),courseId:courseId||null,players:{},flights:null,flightsKey:'',scores:{}}}
 function defaultDB(){return {
   golfers:[], courses:[], history:[],
-  settings:{roundFee:20, skinsFee:10, hcpMethod:'index', mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
+  settings:{entryFee:20, roundFee:10, skinsFee:5, par3Fee:1, hcpMethod:'course', tieRule:'cardoff', mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
   week:newWeek(null)
 }}
 /* Everything is stored online in Supabase (one record holds the whole league). */
@@ -214,7 +214,8 @@ function fmtDate(s){ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); r
 function weekPlayers(){
   const w=db.week, c=getCourse(w.courseId);
   return Object.keys(w.players).map(id=>{const g=golfer(id); if(!g) return null;
-    return {id,name:g.name,index:g.index,ch:courseHcp(g.index,c),skins:!!w.players[id].skins};}).filter(Boolean);
+    const wp=w.players[id], calc=courseHcp(g.index,c), over=wp.ch!=null&&wp.ch!=='';
+    return {id,name:g.name,index:g.index,ch:over?+wp.ch:calc,chCalc:calc,chOverride:over,skins:!!wp.skins};}).filter(Boolean);
 }
 const MAX_FLIGHTS=4;   // the league never uses more than 4 flights
 function flightCount(n){ return n<10?1:Math.min(MAX_FLIGHTS,Math.floor(n/10)); }
@@ -222,18 +223,19 @@ function makeFlights(players){
   const p=[...players].sort((a,b)=>a.ch-b.ch || (a.index??0)-(b.index??0) || a.name.localeCompare(b.name));
   const n=p.length; if(!n) return [];
   const F=flightCount(n), base=Math.floor(n/F), rem=n%F, out=[]; let k=0;
-  for(let i=0;i<F;i++){ const size=base+(i>=F-rem?1:0); out.push(p.slice(k,k+size).map(x=>x.id)); k+=size; }
+  for(let i=0;i<F;i++){ const size=base+(i<rem?1:0); out.push(p.slice(k,k+size).map(x=>x.id)); k+=size; }
   return out;
 }
 function ensureFlights(force){
-  const ps=weekPlayers(); const key='max'+MAX_FLIGHTS+'|'+db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
+  const ps=weekPlayers(); const key='v3|'+MAX_FLIGHTS+'|'+db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
   if(force || !db.week.flights || db.week.flightsKey!==key){ db.week.flights=makeFlights(ps); db.week.flightsKey=key; save(); }
   return db.week.flights;
 }
 
 /* ======================= CALCULATIONS ======================= */
 // Awards places across one or more categories (Gross / Net). A golfer can win only once:
-// the highest-paying open place is always filled first. Tied golfers split the places they cover.
+// the highest-paying open place is always filled first. Golfers still tied after the card-off
+// (or all tied golfers, when the league splits ties) share the places they cover equally.
 function awardPlaces(cats,places,pct){
   const out=[], taken=new Set();
   cats.forEach(c=>{c.next=0;c.amounts=pct.slice(0,places).map(p=>c.purse*(+p||0)/100);});
@@ -246,7 +248,7 @@ function awardPlaces(cats,places,pct){
       if(!best || v>best.v+1e-9) best={c,v,rem};
     }
     if(!best) break;
-    const {c,rem}=best, top=rem[0].score, grp=rem.filter(x=>x.score===top);
+    const {c,rem}=best, top=rem[0], same=(a,b)=>a.score===b.score&&(a.tb||[]).join()===(b.tb||[]).join(), grp=rem.filter(x=>same(x,top));
     const end=Math.min(c.next+grp.length,places); let sum=0;
     for(let i=c.next;i<end;i++) sum+=c.amounts[i];
     const label=(grp.length>1?'T-':'')+ordinal(c.next+1);
@@ -288,15 +290,20 @@ function computeResults(){
     rows.filter(r=>!r.complete).forEach(r=>res.warnings.push(`${r.name} (${name}) does not have all 18 scores entered — not counted for prizes.`));
     const done=rows.filter(r=>r.complete);
     const purse=s.roundFee*ids.length, share=s.mode==='both'?0.5:1, cats=[];
-    if(s.mode!=='net') cats.push({key:'Gross',purse:purse*share,list:[...done].sort((a,b)=>a.gross-b.gross).map(r=>({id:r.id,score:r.gross}))});
-    if(s.mode!=='gross') cats.push({key:'Net',purse:purse*share,list:[...done].sort((a,b)=>a.net-b.net).map(r=>({id:r.id,score:r.net}))});
+    // Card-off: compare the last 9, 6, 3 and 1 holes (net uses the matching share of the handicap)
+    const cardoff=s.tieRule!=='split';
+    const tb=(r,net)=>{ if(!cardoff) return []; const last=n=>{let t=0;for(let h=18-n;h<18;h++)t+=hole(r.id,h);return t;};
+      return [[9,1/2],[6,1/3],[3,1/6],[1,1/18]].map(([n,f])=>Math.round((last(n)-(net?r.ch*f:0))*1000)/1000); };
+    const order=(a,b)=>a.score-b.score||a.tb.reduce((d,v,i)=>d||v-b.tb[i],0);
+    if(s.mode!=='net') cats.push({key:'Gross',purse:purse*share,list:done.map(r=>({id:r.id,score:r.gross,tb:tb(r,false)})).sort(order)});
+    if(s.mode!=='gross') cats.push({key:'Net',purse:purse*share,list:done.map(r=>({id:r.id,score:r.net,tb:tb(r,true)})).sort(order)});
     const awards=awardPlaces(cats,s.places,pct);
     awards.forEach(a=>{a.name=P[a.id].name; pay(a.id,'round',a.amount);});
     const unpaid=cats.reduce((t,c)=>t+c.amounts.slice(c.next).reduce((a,b)=>a+b,0),0);
     if(done.length && unpaid>0.004) res.warnings.push(`${name}: ${money(unpaid)} of round money was not paid out (not enough golfers for every place).`);
 
     const sp=rows.filter(r=>r.skins);
-    const skinsPot=s.skinsFee*sp.length*otherHoles/18, holes=[];
+    const skinsPot=s.skinsFee*sp.length, holes=[];
     for(let h=0;h<18;h++){ if(pars[h]===3) continue;
       const hs=sp.map(r=>({id:r.id,v:hole(r.id,h)})).filter(x=>x.v>0);
       if(!hs.length){holes.push({hole:h+1,low:null,winner:null,tied:0});continue;}
@@ -310,7 +317,7 @@ function computeResults(){
   });
 
   const allSkins=Object.values(P).filter(p=>p.skins); res.skinsCount=allSkins.length;
-  const base=s.skinsFee*allSkins.length/18;
+  const base=(+s.par3Fee||0)*allSkins.length;
   par3Holes.forEach(h=>{
     const carryIn=carryFor(c,h,w.date), pot=base+carryIn;
     const hs=allSkins.map(p=>({id:p.id,v:hole(p.id,h)})).filter(x=>x.v>0);
@@ -323,6 +330,8 @@ function computeResults(){
   let paid=0; for(const id in res.payouts){const p=res.payouts[id]; p.total=p.round+p.skins+p.par3; paid+=p.total;}
   res.collectedRound=s.roundFee*res.playerCount;
   res.collectedSkins=s.skinsFee*res.skinsCount;
+  res.collectedPar3=(+s.par3Fee||0)*res.skinsCount*par3Holes.length;
+  res.entryTotal=(+s.entryFee||0)*res.playerCount;
   res.paid=paid;
   res.rollover=res.par3.filter(p=>!p.winner).reduce((a,p)=>a+p.pot,0);
   res.carryInTotal=res.par3.reduce((a,p)=>a+p.carryIn,0);
@@ -363,8 +372,8 @@ function rCheckin(){
   <input id="search" style="width:100%" placeholder="🔍  Type a name to find a golfer…" value="${esc(state.search)}" oninput="state.search=this.value;drawGrid()">
   <div id="grid" class="namegrid">${gridHTML()}</div>
   <h2>Playing this week (${n})</h2>
-  ${n?`<div class="card"><table><tr><th>Name</th><th class="num">Index</th><th class="num">Strokes</th><th>Skins</th><th></th></tr>
-  ${[...ps].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${showIndex(p.index)}</td><td class="num">${p.ch}</td>
+  ${n?`<div class="card"><table><tr><th>Name</th><th class="num">Index</th><th class="num" title="Leave blank to use the handicap">Strokes this week</th><th>Skins</th><th></th></tr>
+  ${[...ps].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${showIndex(p.index)}</td><td class="num"><input inputmode="numeric" style="width:90px;text-align:center;min-height:44px;padding:6px;${p.chOverride?'border-color:var(--gold);font-weight:700':''}" value="${p.chOverride?showStrokes(p.ch):''}" placeholder="${showStrokes(p.chCalc)}" title="Strokes this week. Leave blank to use the handicap." onchange="setStrokes('${p.id}',this.value)"></td>
     <td><button class="btn small ${p.skins?'':'ghost'}" onclick="toggleSkins('${p.id}')">${p.skins?'✓ In skins':'Not in skins'}</button></td>
     <td><button class="btn small danger" onclick="togglePlay('${p.id}')">Remove</button></td></tr>`).join('')}</table></div>`:'<p class="muted">Nobody checked in yet.</p>'}
   `;
@@ -377,6 +386,11 @@ function gridHTML(){
 }
 function drawGrid(){ document.getElementById('grid').innerHTML=gridHTML(); }
 function togglePlay(id){ const w=db.week; if(w.players[id]) delete w.players[id]; else w.players[id]={skins:true}; save(); render(); const s=document.getElementById('search'); if(s&&state.search){s.focus();} }
+const showStrokes=n=>n<0?'+'+(-n):String(n);
+// Strokes for this week only (e.g. the course handicap from the pro shop). Blank = worked out from the handicap.
+function setStrokes(id,v){ v=String(v).trim(); const wp=db.week.players[id];
+  if(v===''){ delete wp.ch; } else { const n=parseIndex(v); if(n==null) return alert('Please type a number of strokes, like 12 (or +2 for a plus handicap).'); wp.ch=Math.round(n); }
+  db.week.flightsKey=''; save(); render(); }
 function toggleSkins(id){ db.week.players[id].skins=!db.week.players[id].skins; save(); render(); }
 function newWeekConfirm(){
   const hasScores=Object.values(db.week.scores).some(a=>a&&a.some(v=>v));
@@ -464,6 +478,7 @@ function resultsHTML(res){
     <div class="stat"><span class="muted">Players</span><b>${res.playerCount}</b></div>
     <div class="stat"><span class="muted">Round money</span><b>${money(res.collectedRound)}</b></div>
     <div class="stat"><span class="muted">Skins money</span><b>${money(res.collectedSkins)}</b></div>
+    ${res.collectedPar3!=null?`<div class="stat"><span class="muted">Par 3 money</span><b>${money(res.collectedPar3)}</b></div>`:''}
     <div class="stat"><span class="muted">Par 3 carried in</span><b>${money(res.carryInTotal)}</b></div>
     <div class="stat"><span class="muted">Paid out</span><b>${money(res.paid)}</b></div>
     <div class="stat"><span class="muted">Par 3 rolls to next week</span><b>${money(res.rollover)}</b></div>
@@ -633,10 +648,16 @@ async function delWeek(id){
 function rSettings(){
   const s=db.settings;
   const ec=state.editCourse;
+  const p3n=(getCourse(db.week.courseId)||{pars:[3,3,3,3]}).pars.filter(x=>x===3).length;
+  const used=(+s.roundFee||0)+(+s.skinsFee||0)+(+s.par3Fee||0)*p3n, left=(+s.entryFee||0)-used;
   return `<h2 style="margin-top:0">Money</h2><div class="card"><div class="row">
-    <div><label>Round fee per player ($)</label><input type="number" min="0" step="1" value="${s.roundFee}" style="width:180px" onchange="setNum('roundFee',this.value)"></div>
-    <div><label>Skins fee per player ($)</label><input type="number" min="0" step="1" value="${s.skinsFee}" style="width:180px" onchange="setNum('skinsFee',this.value)"></div></div>
-    <p class="muted" style="margin-bottom:0">Round money is paid within each flight. Skins money is split by hole: par 3 holes go to the whole-field par 3 skins (rolls over week to week if tied), the other holes go to each flight's skins.</p></div>
+    <div><label>Entry fee per golfer ($)</label><input type="number" min="0" step="1" value="${s.entryFee??''}" style="width:150px" onchange="setNum('entryFee',this.value)"></div>
+    <div><label>Gross + net prizes ($)</label><input type="number" min="0" step="0.5" value="${s.roundFee}" style="width:150px" onchange="setNum('roundFee',this.value)"></div>
+    <div><label>Flight skins ($)</label><input type="number" min="0" step="0.5" value="${s.skinsFee}" style="width:150px" onchange="setNum('skinsFee',this.value)"></div>
+    <div><label>Each par 3 skin ($)</label><input type="number" min="0" step="0.5" value="${s.par3Fee??0}" style="width:150px" onchange="setNum('par3Fee',this.value)"></div></div>
+    <p style="margin-bottom:0">Each golfer pays <b>${money(s.entryFee)}</b>: ${money(s.roundFee)} gross &amp; net prizes + ${money(s.skinsFee)} flight skins + ${money(s.par3Fee)} × ${p3n} par 3s = <b>${money(used)}</b> paid out.
+      ${left>0.004?`<b>${money(left)}</b> is not paid out (kept by the league).`:left<-0.004?`<b style="color:var(--red)">That's ${money(-left)} more than the entry fee.</b>`:''}</p>
+    <p class="muted" style="margin-bottom:0">Gross &amp; net prizes and flight skins are paid inside each flight, from that flight's own golfers. Flight skins are gross and skip the par 3s. Each par 3 is a skin for the whole field that rolls over to next week until someone wins it outright.</p></div>
   <h2>Handicaps</h2><div class="card">
     <label>How is net score worked out?</label><div class="seg">${[['index','Subtract handicap as-is'],['course','Use course handicap']].map(([k,l])=>`<button class="${(s.hcpMethod||'index')===k?'on':''}" onclick="setHcpMethod('${k}')">${l}</button>`).join('')}</div>
     <p class="muted" style="margin-bottom:0">${(s.hcpMethod||'index')==='index'
@@ -645,7 +666,9 @@ function rSettings(){
   <h2>Prizes</h2><div class="card">
     <label>Pay prizes for</label><div class="seg">${[['gross','Gross only'],['net','Net only'],['both','Gross & Net']].map(([k,l])=>`<button class="${s.mode===k?'on':''}" onclick="db.settings.mode='${k}';save();render()">${l}</button>`).join('')}</div>
     ${s.mode==='both'?'<p class="muted">Each flight\'s round money is split 50/50 between gross and net. A golfer can only win one prize — he gets the one that pays more.</p>':''}
-    <br><label>Number of places paid in each flight</label><div class="seg">${[1,2,3].map(n=>`<button class="${s.places===n?'on':''}" onclick="db.settings.places=${n};save();render()">${n} place${n>1?'s':''}</button>`).join('')}</div>
+    <br><label>When golfers tie for a prize</label><div class="seg">${[['cardoff','Card-off (like Golf Genius)'],['split','Split the money']].map(([k,l])=>`<button class="${(s.tieRule||'cardoff')===k?'on':''}" onclick="db.settings.tieRule='${k}';save();render()">${l}</button>`).join('')}</div>
+    <p class="muted">${(s.tieRule||'cardoff')==='cardoff'?'Ties are broken on the last 9 holes, then the last 6, last 3 and the 18th (for net, with the same share of the handicap). Only if still tied is the money split.':'Tied golfers share the prize money for the places they cover equally.'}</p>
+    <label>Number of places paid in each flight</label><div class="seg">${[1,2,3].map(n=>`<button class="${s.places===n?'on':''}" onclick="db.settings.places=${n};save();render()">${n} place${n>1?'s':''}</button>`).join('')}</div>
     <br><label>Percentage for each place (must add up to 100)</label><div class="row">
     ${s.pct[s.places].map((p,i)=>`<div><label>${ordinal(i+1)} place %</label><input type="number" min="0" max="100" value="${p}" style="width:130px" onchange="setPct(${i},this.value)"></div>`).join('')}
     <div style="padding-bottom:14px">${(()=>{const t=s.pct[s.places].reduce((a,b)=>a+(+b||0),0);return t===100?'<span class="pill yes">Total 100% ✓</span>':`<span class="pill no" style="background:var(--red-light);color:var(--red)">Total ${t}% — should be 100%</span>`})()}</div></div></div>
