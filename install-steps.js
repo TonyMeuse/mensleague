@@ -70,6 +70,21 @@
       { title: 'Tap “Add”', text: 'At the <b>top right</b>, tap <b>Add</b>.', pic: pics.addButton() },
       { title: 'Open it from your Home Screen', text: 'Close ' + (chrome ? 'Chrome' : 'Safari') + '. On your Home Screen, tap the new <b>League</b> icon.', pic: pics.homeScreen() }];
   }
+  // Short one-line version of each step, for the list that stays visible at the top of the screen
+  function shortFor(title, kind) {
+    const where = kind === 'ios-chrome' ? 'top right' : 'bottom';
+    return ({
+      'Tap the three dots': `<span>${dotsIcon(26)}</span><span>Tap the <b>three dots</b>, bottom right</span>`,
+      'Tap “Share”': `<span>${shareIcon(26)}</span><span>Tap <b>Share</b></span>`,
+      'Tap the Share button': `<span>${shareIcon(26)}</span><span>Tap <b>Share</b>, ${where}</span>`,
+      'Tap “Add to Home Screen”': `<span>${addIcon(26)}</span><span>Tap <b>Add to Home Screen</b> (scroll down)</span>`,
+      'Tap “Add”': `<b style="color:${BLUE};font-size:.9rem">Add</b><span>Tap <b>Add</b>, top right</span>`,
+      'Open it from your Home Screen': `<span>${appIcon(26)}</span><span>Open <b>League</b> on your Home Screen</span>`,
+      'Tap the menu button': `<span>${kebabIcon(26)}</span><span>Tap the <b>three dots</b>, top right</span>`,
+      'Tap “Install app”': `<span>📲</span><span>Tap <b>Install app</b></span>`,
+      'Tap “Install”': `<b style="color:${GREEN}">✓</b><span>Tap <b>Install</b></span>`
+    })[title] || title;
+  }
   function phoneKind() {
     const ua = navigator.userAgent;
     if (/Android/i.test(ua)) return 'android';
@@ -78,5 +93,6 @@
     const v = +((ua.match(/Version\/(\d+)/) || [])[1] || 0);
     return v >= 26 ? 'ios-new' : 'ios-safari';
   }
-  window.INSTALL = { steps, phoneKind, pics, shareIcon, appIcon };
+  const withShort = kind => steps(kind).map(st => ({ ...st, short: shortFor(st.title, kind) }));
+  window.INSTALL = { steps: withShort, phoneKind, pics, shareIcon, appIcon };
 })();
