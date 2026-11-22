@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script>window.APP_VERSION='20261122101239';</script>
+<script>window.APP_VERSION='20261122110028';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -30,7 +30,10 @@
   .tabs button{flex:1;border:0;background:none;padding:10px 0 12px;font-size:.85rem;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
   .tabs button span{font-size:1.5rem}
   .tabs button.on{color:var(--green)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;overflow-x:auto}
+  table.tight th,table.tight td{padding:9px 3px;font-size:.92rem}
+  table.tight th{white-space:nowrap;font-size:.72rem}
+  table.tight td:first-child{padding-left:0}
   h2{font-size:1.25rem;margin:18px 0 10px}
   h3{font-size:1.05rem;margin:0 0 8px}
   .btn{display:block;width:100%;font-size:1.15rem;font-weight:700;padding:16px;border-radius:14px;border:2px solid var(--green);background:var(--green);color:#fff;font-family:inherit}
@@ -87,6 +90,7 @@ function put(k,v){ try{ v==null?localStorage.removeItem(k):localStorage.setItem(
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=x=>'$'+(Math.round((x||0)*100)/100).toFixed(2);
+const moneyS=x=>{const v=Math.round((x||0)*100)/100; return '$'+(Number.isInteger(v)?v:v.toFixed(2));};   // $36 instead of $36.00
 const fmtDate=(s,long)=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString(undefined,long?{weekday:'long',month:'long',day:'numeric'}:{month:'short',day:'numeric'});};
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
 const one=x=>x==null?'—':(Math.round(x*10)/10).toFixed(1);
@@ -273,8 +277,8 @@ function rResults(){
       ${aw?`<p style="margin:10px 0 0">🏆 ${aw.place} ${aw.cat}</p>`:''}</div>`;
   }
   const pays=Object.entries(r.payouts).map(([id,p])=>({id,...p})).filter(p=>p.total>0.004).sort((a,b)=>b.total-a.total);
-  h+=`<h2>Who won money</h2><div class="card"><table><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
-    ${pays.map(p=>`<tr class="${p.id===me?'me':''}"><td>${esc(p.name)}</td><td class="num">${p.round?money(p.round):''}</td><td class="num">${p.skins?money(p.skins):''}</td><td class="num">${p.par3?money(p.par3):''}</td><td class="num money">${money(p.total)}</td></tr>`).join('')}</table></div>`;
+  h+=`<h2>Who won money</h2><div class="card"><table class="tight"><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
+    ${pays.map(p=>`<tr class="${p.id===me?'me':''}"><td>${esc(p.name)}</td><td class="num">${p.round?moneyS(p.round):''}</td><td class="num">${p.skins?moneyS(p.skins):''}</td><td class="num">${p.par3?moneyS(p.par3):''}</td><td class="num money">${moneyS(p.total)}</td></tr>`).join('')}</table></div>`;
   h+=`<h2>Par 3 skins</h2><div class="card"><table>${r.par3.map(p=>`<tr class="${p.winner===me?'me':''}"><td><b>#${p.hole}</b></td><td>${p.winner?`${esc(p.winnerName)} (${p.low})`:`<span class="muted">Tied – rolls over</span>`}</td><td class="num money">${money(p.pot)}</td></tr>`).join('')}</table>
     ${r.rollover>0.004?`<p class="muted" style="margin-bottom:0">${money(r.rollover)} rolls over to next week.</p>`:''}</div>`;
   h+='<h2>Flights</h2>';
