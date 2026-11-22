@@ -184,13 +184,19 @@ async function syncRoster(){
 }
 window.addEventListener('beforeunload',e=>{ if(dirty||saving){ e.preventDefault(); e.returnValue=''; } });
 
+/* One click in a box selects everything in it, so typing replaces it */
+document.addEventListener('focusin',e=>{ const t=e.target;
+  if(t.tagName==='INPUT' && /^(text|number|email|search|tel|date|)$/.test(t.type) && t.type!=='date'){ try{ t.select(); }catch(_){} t._sel=true; } });
+document.addEventListener('mouseup',e=>{ if(e.target._sel){ e.preventDefault(); e.target._sel=false; } },true);
+document.addEventListener('focusout',e=>{ e.target._sel=false; });
+
 /* ======================= HELPERS ======================= */
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=x=>'$'+(Math.round((x||0)*100)/100).toFixed(2);
 const ordinal=n=>n+(['th','st','nd','rd'][(n%100-20)%10]||['th','st','nd','rd'][n%100]||'th');
 const golfer=id=>db.golfers.find(g=>g.id===id);
 const getCourse=id=>db.courses.find(c=>c.id===id);
-const coursePar=c=>c.pars.reduce((a,b)=>a+b,0);
+const coursePar=c=>c.pars.reduce((a,b)=>a+(+b||0),0);
 function parseIndex(v){ v=String(v).trim(); if(v==='') return null; const plus=v.startsWith('+'); const n=parseFloat(v.replace('+','')); if(isNaN(n)) return null; return plus?-n:n; }
 function showIndex(n){ if(n==null) return '—'; return n<0?'+'+(-n).toFixed(1):(+n).toFixed(1); }
 // Strokes a golfer gets. League setting: subtract the Golf Canada handicap as-is (rounded),
@@ -652,20 +658,33 @@ function setNum(k,v){ const n=parseFloat(v); if(isNaN(n)||n<0) return alert('Ple
 function setPct(i,v){ db.settings.pct[db.settings.places][i]=parseFloat(v)||0; save(); render(); }
 function editCourse(id){
   const c=id?getCourse(id):null;
-  state.editCourse=c?JSON.parse(JSON.stringify(c)):{id:null,name:'',slope:113,rating:72,pars:Array(18).fill(4),startCarry:{}};
+  state.editCourse=c?JSON.parse(JSON.stringify(c)):{id:null,name:'',slope:null,rating:null,pars:Array(18).fill(null),startCarry:{}};
   render();
 }
 function courseForm(c){
-  const parRow=start=>{let h='';for(let i=start;i<start+9;i++)h+=`<div>${i+1}</div>`;for(let i=start;i<start+9;i++)h+=`<input id="par${i}" inputmode="numeric" value="${c.pars[i]}" onchange="state.editCourse.pars[${i}]=+this.value;render()">`;return h;};
-  const p3=c.pars.map((p,i)=>p===3?i:-1).filter(i=>i>=0);
+  const v=x=>x==null||x===''?'':x;
+  const parRow=start=>{let h='';for(let i=start;i<start+9;i++)h+=`<div>${i+1}</div>`;
+    for(let i=start;i<start+9;i++)h+=`<input id="par${i}" inputmode="numeric" maxlength="1" value="${v(c.pars[i])}" oninput="parInput(this,${i})">`;return h;};
   return `<div class="card"><h3>${c.id?'Edit course':'Add a course'}</h3><div class="row">
     <div style="flex:2;min-width:240px"><label>Course name</label><input style="width:100%" value="${esc(c.name)}" oninput="state.editCourse.name=this.value"></div>
-    <div><label>Slope</label><input type="number" style="width:140px" value="${c.slope}" oninput="state.editCourse.slope=+this.value"></div>
-    <div><label>Rating</label><input type="number" step="0.1" style="width:140px" value="${c.rating}" oninput="state.editCourse.rating=+this.value"></div></div>
-    <br><label>Par for each hole (total ${coursePar(c)})</label><div class="pars">${parRow(0)}</div><br><div class="pars">${parRow(9)}</div>
-    ${p3.length?`<br><label>Par 3 money already carried over (only if your league has a rollover from before using this program)</label><div class="row">
-      ${p3.map(i=>`<div><label>Hole ${i+1} $</label><input type="number" min="0" style="width:130px" value="${(c.startCarry||{})[i]||0}" oninput="state.editCourse.startCarry[${i}]=+this.value"></div>`).join('')}</div>`:''}
+    <div><label>Slope</label><input type="number" style="width:140px" value="${v(c.slope)}" oninput="state.editCourse.slope=this.value===''?null:+this.value"></div>
+    <div><label>Rating</label><input type="number" step="0.1" style="width:140px" value="${v(c.rating)}" oninput="state.editCourse.rating=this.value===''?null:+this.value"></div></div>
+    <br><label>Par for each hole (total <span id="parTotal">${coursePar(c)||'—'}</span>)</label><div class="pars">${parRow(0)}</div><br><div class="pars">${parRow(9)}</div>
+    <div id="p3carry">${carryHTML(c)}</div>
     <br><div class="row"><button class="btn big" onclick="saveCourse()">Save Course</button><button class="btn big ghost" onclick="state.editCourse=null;render()">Cancel</button></div></div>`;
+}
+function carryHTML(c){
+  const p3=c.pars.map((p,i)=>p===3?i:-1).filter(i=>i>=0); if(!p3.length) return '';
+  return `<br><label>Par 3 money already carried over (only if your league has a rollover from before using this program)</label><div class="row">
+    ${p3.map(i=>`<div><label>Hole ${i+1} $</label><input type="number" min="0" style="width:130px" value="${(c.startCarry||{})[i]||''}" placeholder="0" oninput="state.editCourse.startCarry[${i}]=+this.value||0"></div>`).join('')}</div>`;
+}
+// Typing a par updates the total and jumps to the next hole (without redrawing the form)
+function parInput(el,i){
+  const d=el.value.replace(/[^0-9]/g,'').slice(-1); el.value=d;
+  const c=state.editCourse, was3=c.pars[i]===3; c.pars[i]=d?+d:null;
+  document.getElementById('parTotal').textContent=coursePar(c)||'—';
+  if(was3!==(c.pars[i]===3)) document.getElementById('p3carry').innerHTML=carryHTML(c);
+  if(d && i<17) document.getElementById('par'+(i+1)).focus();
 }
 function saveCourse(){
   const c=state.editCourse;
