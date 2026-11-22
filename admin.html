@@ -158,8 +158,17 @@ async function flush(){
   saving=false;
   if(error){ dirty=true; console.error(error); setStatus('⚠ NOT SAVED – check internet','bad'); saveTimer=setTimeout(flush,5000); return false; }
   if(again){ again=false; return flush(); }
+  await syncRoster();
   if(!dirty) setStatus('✓ Saved','ok');
   return true;
+}
+// Keep the golfers' name list on phones up to date whenever the roster changes
+let rosterSent='';
+async function syncRoster(){
+  const list=db.golfers.map(g=>({id:g.id,name:g.name})), sig=league.id+JSON.stringify(list);
+  if(sig===rosterSent) return;
+  const {error}=await sb.from('public_roster').upsert({league_id:league.id,data:list});
+  if(!error) rosterSent=sig;
 }
 window.addEventListener('beforeunload',e=>{ if(dirty||saving){ e.preventDefault(); e.returnValue=''; } });
 
@@ -813,7 +822,7 @@ async function openLeague(l){
   try{ fresh=await loadRemote(); }catch(e){ console.error(e); app().innerHTML=box(`<p>Could not load the league. Please check the internet connection.</p><button class="btn big" onclick="location.reload()">Try Again</button>`); return; }
   if(fresh){ addTestGolfers(); db.testSeeded=true; }
   if(!db.week.courseId && db.courses.length) db.week.courseId=db.courses[0].id;
-  if(fresh){ await flush(); state.tab='settings'; } else setStatus('✓ Saved','ok');
+  if(fresh){ await flush(); state.tab='settings'; } else { setStatus('✓ Saved','ok'); syncRoster(); }
   document.getElementById('nav').style.display='';
   render();
   if(fresh) alert(`Welcome to ${l.name}!\n\nStart here in Settings: add your course and set the league password.\n\n100 test golfers have been added so you can try things out. Remove them in Settings when you're ready.`);
