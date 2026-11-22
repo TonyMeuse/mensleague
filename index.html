@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Men's League</title>
+<title>Golf League</title>
 <meta name="theme-color" content="#1f6b3a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="League">
@@ -64,14 +64,17 @@
 </style>
 </head>
 <body>
-<header><h1>⛳ Men's League</h1><span id="hdrBtn"></span></header>
+<header><h1 id="title">⛳ Golf League</h1><span id="hdrBtn"></span></header>
 <main id="app"><div class="card center muted">Loading…</div></main>
 <nav class="tabs" id="tabs" style="display:none"></nav>
 
 <script>
 const cfg=window.LEAGUE_CONFIG||{};
 let sb=null, data=null, tab='results', weekSel=null;
-let pw=get('ml.pw'), me=get('ml.me');
+// Each league has its own link: index.html?l=<league code>
+let slug=new URLSearchParams(location.search).get('l')||get('ml.slug'), pw=null, me=null;
+function useLeague(s){ slug=s; put('ml.slug',s); pw=get('ml.pw.'+s); me=get('ml.me.'+s);
+  if(new URLSearchParams(location.search).get('l')!==s) history.replaceState(null,'','?l='+encodeURIComponent(s)); }
 function get(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
 function put(k,v){ try{ v==null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch(e){} }
 const $=id=>document.getElementById(id);
@@ -89,35 +92,49 @@ const myName=()=>{const r=(data&&data.roster||[]).find(g=>g.id===me);return r?r.
   if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   navigator.serviceWorker && navigator.serviceWorker.addEventListener('message',()=>refresh());
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&data) refresh(); });
+  if(!slug) return showLeagues();
+  useLeague(slug);
   if(pw) refresh(); else showPassword();
 })();
 
+async function showLeagues(msg){
+  $('tabs').style.display='none'; $('hdrBtn').innerHTML=''; $('title').textContent="⛳ Golf League";
+  const {data:ls,error}=await sb.rpc('list_leagues');
+  if(error){ $('app').innerHTML='<div class="card center">Can\'t connect. Please check your internet.<br><br><button class="btn" onclick="showLeagues()">Try Again</button></div>'; return; }
+  $('app').innerHTML=`<h2>Which league?</h2>${msg?`<div class="err">${esc(msg)}</div>`:''}<div class="namelist">${ls.map(l=>`<button onclick="pickLeague('${esc(l.slug)}')">⛳ ${esc(l.name)}</button>`).join('')||'<p class="muted">No leagues yet.</p>'}</div>`;
+}
+function pickLeague(s){ data=null; useLeague(s); if(pw) refresh(); else showPassword(); }
+
 async function refresh(){
-  const {data:d,error}=await sb.rpc('get_league_data',{pw});
+  const {data:d,error}=await sb.rpc('get_league_data',{s:slug,pw});
   if(error){
-    if(/wrong password/i.test(error.message)){ pw=null; put('ml.pw',null); return showPassword('The league password has changed. Please type the new one.'); }
+    if(/wrong password/i.test(error.message)){ pw=null; put('ml.pw.'+slug,null); return showPassword('The league password has changed. Please type the new one.'); }
     if(!data){ $('app').innerHTML='<div class="card center">Can\'t load results. Please check your internet.<br><br><button class="btn" onclick="refresh()">Try Again</button></div>'; }
     return;
   }
-  data=d;
-  if(!me || !data.roster.some(g=>g.id===me)) return showPickName();
+  data=d; $('title').textContent='⛳ '+d.name;
+  if(!me || (me!=='none' && !data.roster.some(g=>g.id===me))) return showPickName();
   draw();
 }
 
-function showPassword(msg){
+async function showPassword(msg){
   $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
-  $('app').innerHTML=`<div class="card" style="margin-top:30px"><h2 style="margin-top:0">Welcome!</h2>
+  const {data:info}=await sb.rpc('league_info',{s:slug});
+  if(!info) return showLeagues('That league link was not found. Please pick your league.');
+  $('title').textContent='⛳ '+info.name;
+  $('app').innerHTML=`<div class="card" style="margin-top:30px"><h2 style="margin-top:0">Welcome to ${esc(info.name)}!</h2>
     <p class="muted">Type the league password to see results, the money list and your stats.</p>
     ${msg?`<div class="err">${esc(msg)}</div>`:''}
     <input id="pwin" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="League password" onkeydown="if(event.key==='Enter')tryPw()"><br><br>
-    <button class="btn" onclick="tryPw()">Open</button></div>`;
+    <button class="btn" onclick="tryPw()">Open</button></div>
+    <button class="btn ghost" onclick="showLeagues()">A different league</button>`;
 }
 async function tryPw(){
   const v=$('pwin').value.trim(); if(!v) return;
-  const {data:d,error}=await sb.rpc('get_league_data',{pw:v});
+  const {data:d,error}=await sb.rpc('get_league_data',{s:slug,pw:v});
   if(error) return showPassword(/wrong password/i.test(error.message)?'That password is not right. Please try again.':'Can\'t connect. Please check your internet.');
-  pw=v; put('ml.pw',v); data=d;
-  if(!me || !data.roster.some(g=>g.id===me)) return showPickName();
+  pw=v; put('ml.pw.'+slug,v); data=d; $('title').textContent='⛳ '+d.name;
+  if(!me || (me!=='none' && !data.roster.some(g=>g.id===me))) return showPickName();
   draw();
 }
 
@@ -126,7 +143,8 @@ function showPickName(){
   $('app').innerHTML=`<h2>Who are you?</h2><p class="muted" style="margin-top:0">Pick your name once. This phone will remember it.</p>
     <input placeholder="🔍 Type your name…" oninput="drawNames(this.value)" autocomplete="off"><br><br>
     <div class="namelist" id="names"></div>
-    <button class="btn ghost" onclick="pickName(null)">Skip – just show results</button>`;
+    <button class="btn ghost" onclick="pickName(null)">Skip – just show results</button><br>
+    <button class="btn ghost" onclick="showLeagues()">Switch to another league</button>`;
   drawNames('');
 }
 function drawNames(q){
@@ -135,10 +153,10 @@ function drawNames(q){
   $('names').innerHTML=list.map(g=>`<button onclick="pickName('${g.id}')">${esc(g.name)}</button>`).join('')||'<p class="muted">No names match.</p>';
 }
 async function pickName(id){
-  me=id||'none'; put('ml.me',me);
+  me=id||'none'; put('ml.me.'+slug,me);
   // move this phone's alerts to the new name
   try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();
-       if(sub && id) await sb.rpc('save_push_sub',{pw,golfer:id,sub:sub.toJSON()}); }catch(e){}
+       if(sub && id) await sb.rpc('save_push_sub',{s:slug,pw,golfer:id,sub:sub.toJSON()}); }catch(e){}
   tab='results'; draw();
 }
 
@@ -274,14 +292,14 @@ async function alertsOn(){
     if(perm!=='granted') return drawAlerts();
     const reg=await navigator.serviceWorker.ready;
     const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(cfg.vapidPublicKey)});
-    const {error}=await sb.rpc('save_push_sub',{pw,golfer:me,sub:sub.toJSON()});
+    const {error}=await sb.rpc('save_push_sub',{s:slug,pw,golfer:me,sub:sub.toJSON()});
     if(error) throw error;
   }catch(e){ console.error(e); alert('Could not turn on alerts. Please try again.'); }
   drawAlerts();
 }
 async function alertsOff(){
   try{ const reg=await navigator.serviceWorker.ready, sub=await reg.pushManager.getSubscription();
-    if(sub){ await sb.rpc('remove_push_sub',{pw,endpoint:sub.endpoint}); await sub.unsubscribe(); } }catch(e){ console.error(e); }
+    if(sub){ await sb.rpc('remove_push_sub',{s:slug,pw,endpoint:sub.endpoint}); await sub.unsubscribe(); } }catch(e){ console.error(e); }
   drawAlerts();
 }
 </script>

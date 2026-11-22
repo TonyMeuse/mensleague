@@ -87,6 +87,7 @@
   .pars div{text-align:center;font-size:.85rem;color:var(--muted);font-weight:700}
   .print-only{display:none}
   .status{margin-left:auto;font-weight:700;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.15)}
+  .status:empty{display:none}
   .status.ok{background:rgba(255,255,255,.2)}
   .status.bad{background:#fff;color:var(--red)}
   #qrsheet{display:none;text-align:center;padding-top:40px}
@@ -108,7 +109,7 @@
 </style>
 </head>
 <body>
-<header><h1>⛳ Men's League Admin</h1><span id="hdrInfo"></span><span id="saveStatus" class="status"></span></header>
+<header><h1>⛳ League Manager</h1><span id="hdrInfo"></span><span id="saveStatus" class="status"></span></header>
 <nav id="nav" style="display:none"></nav>
 <main id="app"><div class="card empty">Loading…</div></main>
 <div id="qrsheet"><h1>⛳ Men's League</h1><p>Scan with your phone camera to see results, the money list and your stats.</p>
@@ -141,7 +142,7 @@ function normalize(){
 }
 function setStatus(t,cls){ const e=document.getElementById('saveStatus'); e.textContent=t; e.className='status '+(cls||''); }
 async function loadRemote(){
-  const {data,error}=await sb.from('league_state').select('data').eq('id',1).maybeSingle();
+  const {data,error}=await sb.from('league_state').select('data').eq('league_id',league.id).maybeSingle();
   if(error) throw error;
   db=data?data.data:defaultDB(); normalize(); return !data;
 }
@@ -153,7 +154,7 @@ async function flush(){
   clearTimeout(saveTimer);
   if(saving){ again=true; return; }
   saving=true; dirty=false;
-  const {error}=await sb.from('league_state').upsert({id:1,data:db,updated_at:new Date().toISOString()});
+  const {error}=await sb.from('league_state').upsert({league_id:league.id,data:db,updated_at:new Date().toISOString()});
   saving=false;
   if(error){ dirty=true; console.error(error); setStatus('⚠ NOT SAVED – check internet','bad'); saveTimer=setTimeout(flush,5000); return false; }
   if(again){ again=false; return flush(); }
@@ -421,7 +422,7 @@ function rResults(){
 function resultsHTML(res){
   const modeTxt={gross:'Gross only',net:'Net only',both:'Gross & Net'}[res.mode];
   const payouts=Object.entries(res.payouts).map(([id,p])=>p).filter(p=>p.total>0.004).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name));
-  let h=`<div class="print-only"><h1>Men's League Results</h1></div>
+  let h=`<div class="print-only"><h1>${esc(league?league.name:'League')} Results</h1></div>
   <div class="card"><h2 style="margin-top:0">${fmtDate(res.date)} · ${esc(res.courseName)}</h2>
     <div class="stat"><span class="muted">Players</span><b>${res.playerCount}</b></div>
     <div class="stat"><span class="muted">Round money</span><b>${money(res.collectedRound)}</b></div>
@@ -451,7 +452,7 @@ function resultsHTML(res){
   });
   return h;
 }
-function golferUrl(){ return new URL('./',location.href).href; }
+function golferUrl(){ return new URL('./',location.href).href+'?l='+league.slug; }
 function busy(msg){ document.getElementById('app').innerHTML=`<div class="card empty">${esc(msg)}</div>`; }
 // Saves the week to History, posts it for golfers, and alerts the golfers who played.
 async function publishWeek(){
@@ -471,8 +472,8 @@ async function publishWeek(){
   const pub={date:res.date,courseName:c.name,pars:c.pars,results:res,players,scores};
 
   busy('Publishing…');
-  const r1=await sb.from('published_weeks').upsert({week_date:res.date,data:pub,published_at:new Date().toISOString()});
-  const r2=await sb.from('public_roster').upsert({id:1,data:db.golfers.map(g=>({id:g.id,name:g.name}))});
+  const r1=await sb.from('published_weeks').upsert({league_id:league.id,week_date:res.date,data:pub,published_at:new Date().toISOString()});
+  const r2=await sb.from('public_roster').upsert({league_id:league.id,data:db.golfers.map(g=>({id:g.id,name:g.name}))});
   if(r1.error||r2.error){ console.error(r1.error||r2.error); alert('Could not publish. Please check the internet connection and try again.'); return render(); }
 
   if(same) db.history=db.history.filter(x=>x!==same);
@@ -482,7 +483,7 @@ async function publishWeek(){
   let msg='Results are published for golfers.';
   if(sendAlert){
     busy('Sending alerts…');
-    const {data,error}=await sb.functions.invoke('send-push',{body:{golferIds:Object.keys(players),title:"⛳ League results are posted",body:`Results for ${fmtDate(res.date)} are up. Tap to see how you did.`,url:golferUrl()}});
+    const {data,error}=await sb.functions.invoke('send-push',{body:{leagueId:league.id,golferIds:Object.keys(players),title:`⛳ ${league.name} results are posted`,body:`Results for ${fmtDate(res.date)} are up. Tap to see how you did.`,url:golferUrl()}});
     if(error) { console.error(error); msg+='\n\nThe phone alerts could not be sent this time.'; }
     else msg+=`\n\nAlert sent to ${data.sent} phone${data.sent===1?'':'s'}.`+(Object.keys(players).length>data.sent?` (Golfers who haven't turned on alerts won't get one.)`:'');
   }
@@ -493,7 +494,8 @@ async function publishWeek(){
 function printQR(){
   const box=document.getElementById('qrbox'); box.innerHTML='';
   new QRCode(box,{text:golferUrl(),width:420,height:420,correctLevel:QRCode.CorrectLevel.M});
-  document.getElementById('qraddr').textContent=golferUrl().replace(/^https?:\/\//,'').replace(/\/$/,'');
+  document.getElementById('qraddr').textContent=golferUrl().replace(/^https?:\/\//,'');
+  document.querySelector('#qrsheet h1').textContent='⛳ '+league.name;
   document.body.classList.add('qr-printing');
   setTimeout(()=>{ window.print(); document.body.classList.remove('qr-printing'); },300);
 }
@@ -501,7 +503,7 @@ async function setLeaguePw(){
   const v=document.getElementById('lpw').value.trim();
   if(v.length<4) return alert('Please use at least 4 letters or numbers.');
   if(db.settings.leaguePassword && !confirm('Change the league password? Every golfer will need to type the new one.')) return;
-  const {error}=await sb.rpc('set_league_password',{pw:v});
+  const {error}=await sb.rpc('set_league_password',{lid:league.id,pw:v});
   if(error){ console.error(error); return alert('Could not set the password. Please check the internet and try again.'); }
   db.settings.leaguePassword=v; save(); render(); alert('League password set to: '+v);
 }
@@ -571,7 +573,7 @@ function reopenWeek(id){
 async function delWeek(id){
   const wk=db.history.find(h=>h.id===id);
   if(!confirm(`Permanently delete the week of ${fmtDate(wk.date)}? Golfers will no longer see it. This cannot be undone.`)) return;
-  const {error}=await sb.from('published_weeks').delete().eq('week_date',wk.date);
+  const {error}=await sb.from('published_weeks').delete().eq('league_id',league.id).eq('week_date',wk.date);
   if(error){ console.error(error); return alert('Could not delete. Please check the internet and try again.'); }
   db.history=db.history.filter(h=>h.id!==id); save(); render();
 }
@@ -609,7 +611,8 @@ function rSettings(){
   <h2>Back up &amp; restore</h2><div class="card"><p class="muted" style="margin-top:0">Everything is saved online automatically. A backup file is extra safety: make one now and then and keep it on a USB stick or in your email.</p>
     <div class="row"><button class="btn big" onclick="backup()">⬇ Back Up Data</button>
     <label class="btn big ghost" style="display:inline-flex;align-items:center;margin:0;color:var(--green);font-size:1.3rem">⬆ Restore From Backup<input type="file" accept=".json,application/json" style="display:none" onchange="restore(this)"></label></div></div>
-  <h2>Account</h2><div class="card"><button class="btn big danger" onclick="signOut()">Sign Out</button></div>`;
+  <h2>Account</h2><div class="card"><p class="muted" style="margin-top:0">You are working on <b style="color:var(--ink)">${esc(league.name)}</b>.</p>
+    <div class="row"><button class="btn big ghost" onclick="switchLeague()">Switch League / Create Another</button><button class="btn big danger" onclick="signOut()">Sign Out</button></div></div>`;
 }
 function setNum(k,v){ const n=parseFloat(v); if(isNaN(n)||n<0) return alert('Please enter a number.'); db.settings[k]=n; save(); render(); }
 function setPct(i,v){ db.settings.pct[db.settings.places][i]=parseFloat(v)||0; save(); render(); }
@@ -683,40 +686,72 @@ function removeTestGolfers(){
   db.golfers=db.golfers.filter(g=>!g.test); db.week.flightsKey=''; save(); render();
 }
 
-/* ======================= SIGN IN & START ======================= */
+/* ======================= SIGN IN, LEAGUES & START ======================= */
+let league=null;   // the league being worked on: {id, slug, name}
 const app=()=>document.getElementById('app');
-function showLogin(msg){
+const lsGet=k=>{ try{return localStorage.getItem(k);}catch(e){return null;} };
+const lsSet=(k,v)=>{ try{ v==null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch(e){} };
+const box=inner=>`<div class="card" style="max-width:580px;margin:40px auto">${inner}</div>`;
+function signedOutLook(){
   document.getElementById('nav').style.display='none';
-  app().innerHTML=`<div class="card" style="max-width:520px;margin:40px auto"><h2 style="margin-top:0">Admin sign in</h2>
+  document.querySelector('header h1').textContent='⛳ League Manager';
+  document.getElementById('hdrInfo').textContent=''; setStatus('');
+}
+function showStart(){
+  signedOutLook();
+  app().innerHTML=box(`<h2 style="margin-top:0">⛳ League Manager</h2>
+    <p class="muted">Check-in, flights, scores, payouts, and results on your golfers' phones.</p>
+    <button class="btn big" style="width:100%" onclick="showLogin()">Sign In</button><br><br>
+    <button class="btn big ghost" style="width:100%" onclick="showCreate()">+ Create a New League</button>`);
+}
+function showLogin(msg){
+  signedOutLook();
+  app().innerHTML=box(`<h2 style="margin-top:0">Sign in</h2>
     ${msg?`<div class="warn">${esc(msg)}</div>`:''}
     <label>Email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
     <label>Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()"><br><br>
-    <button class="btn big" style="width:100%" onclick="doLogin()">Sign In</button></div>`;
+    <button class="btn big" style="width:100%" onclick="doLogin()">Sign In</button><br><br>
+    <button class="btn ghost" onclick="showStart()">◀ Back</button>`);
   document.getElementById('em').focus();
 }
-function showSetup(msg){
-  document.getElementById('nav').style.display='none';
-  app().innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><h2 style="margin-top:0">⛳ Set up your league</h2>
-    <p class="muted">Create the admin login. You'll use this email and password to sign in to this program. Only this login can enter scores and change anything.</p>
+function showCreate(msg){
+  signedOutLook();
+  app().innerHTML=box(`<h2 style="margin-top:0">Create a new league</h2>
+    <p class="muted">The email and password you choose here are this league's admin login.</p>
     ${msg?`<div class="warn">${esc(msg)}</div>`:''}
-    <label>Your email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
+    <label>League name</label><input id="ln" style="width:100%" placeholder="e.g. Men's League, Seniors"><br><br>
+    <label>Admin email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
     <label>Choose a password (at least 8 characters)</label><input id="pw" type="password" autocomplete="new-password" style="width:100%"><br><br>
-    <label>Type the password again</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%" onkeydown="if(event.key==='Enter')doSetup()"><br><br>
-    <button class="btn big" style="width:100%" onclick="doSetup()">Create Admin Login</button></div>`;
-  document.getElementById('em').focus();
+    <label>Type the password again</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%" onkeydown="if(event.key==='Enter')doCreate()"><br><br>
+    <button class="btn big" style="width:100%" onclick="doCreate()">Create League</button><br><br>
+    <button class="btn ghost" onclick="showStart()">◀ Back</button>`);
+  document.getElementById('ln').focus();
 }
-async function doSetup(){
-  const email=document.getElementById('em').value.trim(), password=document.getElementById('pw').value, pw2=document.getElementById('pw2').value;
+async function doCreate(){
+  const name=document.getElementById('ln').value.trim(), email=document.getElementById('em').value.trim(),
+        password=document.getElementById('pw').value, pw2=document.getElementById('pw2').value;
+  if(!name) return alert('Please type the league name.');
   if(!/^\S+@\S+\.\S+$/.test(email)) return alert('Please type a valid email address.');
   if(password.length<8) return alert('The password needs at least 8 characters.');
   if(password!==pw2) return alert('The two passwords are not the same. Please type them again.');
-  busy('Creating your login…');
-  const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.href.split('#')[0]}});
-  if(error) return showSetup(error.message.includes('already')?'That email already has a login. Use the sign-in screen instead.':'Could not create the login: '+error.message);
+  lsSet('ml.pendingLeague',name);   // the league is created right after the first sign-in
+  busy('Creating your league…');
+  const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.href.split(/[?#]/)[0]}});
+  if(error){
+    if(/already/i.test(error.message)){   // existing login: if the password matches, just add the league to it
+      const r=await sb.auth.signInWithPassword({email,password});
+      if(!r.error) return afterLogin();
+      lsSet('ml.pendingLeague',null);
+      return showCreate('That email already has a login. Sign in with it, then use Settings → Switch League / Create Another.');
+    }
+    lsSet('ml.pendingLeague',null);
+    return showCreate('Could not create the login: '+error.message);
+  }
   if(!data.session){
-    app().innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><h2 style="margin-top:0">📧 Check your email</h2>
+    app().innerHTML=box(`<h2 style="margin-top:0">📧 Check your email</h2>
       <p>We sent a message to <b>${esc(email)}</b>. Open it and click the link to confirm your email.</p>
-      <p>Then come back here and sign in.</p><button class="btn big" style="width:100%" onclick="showLogin()">Go to Sign In</button></div>`;
+      <p>Your league <b>${esc(name)}</b> will be ready as soon as you sign in.</p>
+      <button class="btn big" style="width:100%" onclick="showLogin()">Go to Sign In</button>`);
     return;
   }
   afterLogin();
@@ -728,17 +763,62 @@ async function doLogin(){
   if(error) return showLogin(/confirm/i.test(error.message)?'Please confirm your email first: open the message we sent you and click the link.':'That email or password is not right. Please try again.');
   afterLogin();
 }
-async function afterLogin(){
-  const {data:ok,error}=await sb.rpc('claim_admin');
-  if(error||!ok){ await sb.auth.signOut(); return showLogin('This account is not the league admin.'); }
+async function myLeagues(){
+  const {data,error}=await sb.from('leagues').select('id,slug,name').order('created_at');
+  if(error) throw error; return data;
+}
+async function afterLogin(showList){
+  let ls;
+  try{ ls=await myLeagues(); }
+  catch(e){ console.error(e); app().innerHTML=box(`<p>Could not reach the league database. Please check the internet connection.</p><button class="btn big" onclick="location.reload()">Try Again</button>`); return; }
+  const pending=lsGet('ml.pendingLeague');
+  if(pending){ lsSet('ml.pendingLeague',null); return createLeague(pending); }
+  if(!ls.length) return showNewLeague();
+  const last=ls.find(l=>l.id===lsGet('ml.lastLeague'));
+  if(!showList && ls.length===1) return openLeague(ls[0]);
+  if(!showList && last) return openLeague(last);
+  showPicker(ls);
+}
+function showPicker(ls){
+  signedOutLook();
+  app().innerHTML=box(`<h2 style="margin-top:0">Which league?</h2>
+    ${ls.map(l=>`<button class="btn big ghost" style="width:100%;margin-bottom:10px;text-align:left" onclick='openLeague(${JSON.stringify(l).replace(/'/g,"&#39;")})'>⛳ ${esc(l.name)}</button>`).join('')}
+    <br><button class="btn big" style="width:100%" onclick="showNewLeague()">+ Create Another League</button><br><br>
+    <button class="btn ghost" onclick="signOut()">Sign Out</button>`);
+}
+function showNewLeague(){
+  signedOutLook();
+  app().innerHTML=box(`<h2 style="margin-top:0">Create a league</h2>
+    <p class="muted">You'll be this league's admin, using the login you're signed in with.</p>
+    <label>League name</label><input id="ln" style="width:100%" placeholder="e.g. Seniors" onkeydown="if(event.key==='Enter')createLeague(this.value)"><br><br>
+    <button class="btn big" style="width:100%" onclick="createLeague(document.getElementById('ln').value)">Create League</button><br><br>
+    <button class="btn ghost" onclick="afterLogin(true)">◀ Back</button>`);
+  document.getElementById('ln').focus();
+}
+async function createLeague(name){
+  name=String(name||'').trim(); if(!name) return alert('Please type the league name.');
+  busy('Creating '+name+'…');
+  const {data,error}=await sb.rpc('create_league',{league_name:name});
+  if(error){ console.error(error); alert('Could not create the league. Please check the internet and try again.'); return showNewLeague(); }
+  openLeague(data);
+}
+async function openLeague(l){
+  if(dirty) await flush();
+  league=l; lsSet('ml.lastLeague',l.id);
+  state={tab:'checkin',search:'',scoreId:null,editCourse:null,viewWeek:null};
+  document.querySelector('header h1').textContent='⛳ '+l.name;
+  document.title=l.name+' – Admin';
+  busy('Opening '+l.name+'…');
   let fresh;
-  try{ fresh=await loadRemote(); }catch(e){ console.error(e); app().innerHTML=`<div class="card empty">Could not load the league data. Please check the internet connection.<br><br><button class="btn big" onclick="location.reload()">Try Again</button></div>`; return; }
+  try{ fresh=await loadRemote(); }catch(e){ console.error(e); app().innerHTML=box(`<p>Could not load the league. Please check the internet connection.</p><button class="btn big" onclick="location.reload()">Try Again</button>`); return; }
   if(fresh){ addTestGolfers(); db.testSeeded=true; }
   if(!db.week.courseId && db.courses.length) db.week.courseId=db.courses[0].id;
-  if(fresh) await flush(); else setStatus('✓ Saved','ok');
+  if(fresh){ await flush(); state.tab='settings'; } else setStatus('✓ Saved','ok');
   document.getElementById('nav').style.display='';
   render();
+  if(fresh) alert(`Welcome to ${l.name}!\n\nStart here in Settings: add your course and set the league password.\n\n100 test golfers have been added so you can try things out. Remove them in Settings when you're ready.`);
 }
+async function switchLeague(){ if(dirty) await flush(); afterLogin(true); }
 (async function boot(){
   const cfg=window.LEAGUE_CONFIG||{};
   if(!window.supabase || !cfg.supabaseUrl || !cfg.supabaseAnonKey){
@@ -746,9 +826,7 @@ async function afterLogin(){
   }
   sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
   const {data:{session}}=await sb.auth.getSession();
-  if(session) return afterLogin();
-  const {data:exists,error}=await sb.rpc('admin_exists');
-  if(!error && exists===false) showSetup(); else showLogin();
+  if(session) afterLogin(); else showStart();
 })();
 </script>
 </body>
