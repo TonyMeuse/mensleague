@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122093443';</script>
+<script>window.APP_VERSION='20261122095431';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -216,7 +216,8 @@ function weekPlayers(){
   return Object.keys(w.players).map(id=>{const g=golfer(id); if(!g) return null;
     return {id,name:g.name,index:g.index,ch:courseHcp(g.index,c),skins:!!w.players[id].skins};}).filter(Boolean);
 }
-function flightCount(n){ return n<10?1:Math.floor(n/10); }
+const MAX_FLIGHTS=4;   // the league never uses more than 4 flights
+function flightCount(n){ return n<10?1:Math.min(MAX_FLIGHTS,Math.floor(n/10)); }
 function makeFlights(players){
   const p=[...players].sort((a,b)=>a.ch-b.ch || (a.index??0)-(b.index??0) || a.name.localeCompare(b.name));
   const n=p.length; if(!n) return [];
@@ -225,7 +226,7 @@ function makeFlights(players){
   return out;
 }
 function ensureFlights(force){
-  const ps=weekPlayers(); const key=db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
+  const ps=weekPlayers(); const key='max'+MAX_FLIGHTS+'|'+db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
   if(force || !db.week.flights || db.week.flightsKey!==key){ db.week.flights=makeFlights(ps); db.week.flightsKey=key; save(); }
   return db.week.flights;
 }
