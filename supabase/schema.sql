@@ -128,3 +128,10 @@ grant execute on function public.set_league_password(text) to authenticated;
 grant execute on function public.get_league_data(text) to anon, authenticated;
 grant execute on function public.save_push_sub(text, text, jsonb) to anon, authenticated;
 grant execute on function public.remove_push_sub(text, text) to anon, authenticated;
+
+-- Lets the admin app know whether to show "Set up your league" (first time) or the sign-in screen
+create or replace function public.admin_exists() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.admins);
+$$;
+grant execute on function public.admin_exists() to anon, authenticated;

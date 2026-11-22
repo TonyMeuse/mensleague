@@ -694,11 +694,38 @@ function showLogin(msg){
     <button class="btn big" style="width:100%" onclick="doLogin()">Sign In</button></div>`;
   document.getElementById('em').focus();
 }
+function showSetup(msg){
+  document.getElementById('nav').style.display='none';
+  app().innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><h2 style="margin-top:0">⛳ Set up your league</h2>
+    <p class="muted">Create the admin login. You'll use this email and password to sign in to this program. Only this login can enter scores and change anything.</p>
+    ${msg?`<div class="warn">${esc(msg)}</div>`:''}
+    <label>Your email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
+    <label>Choose a password (at least 8 characters)</label><input id="pw" type="password" autocomplete="new-password" style="width:100%"><br><br>
+    <label>Type the password again</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%" onkeydown="if(event.key==='Enter')doSetup()"><br><br>
+    <button class="btn big" style="width:100%" onclick="doSetup()">Create Admin Login</button></div>`;
+  document.getElementById('em').focus();
+}
+async function doSetup(){
+  const email=document.getElementById('em').value.trim(), password=document.getElementById('pw').value, pw2=document.getElementById('pw2').value;
+  if(!/^\S+@\S+\.\S+$/.test(email)) return alert('Please type a valid email address.');
+  if(password.length<8) return alert('The password needs at least 8 characters.');
+  if(password!==pw2) return alert('The two passwords are not the same. Please type them again.');
+  busy('Creating your login…');
+  const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.href.split('#')[0]}});
+  if(error) return showSetup(error.message.includes('already')?'That email already has a login. Use the sign-in screen instead.':'Could not create the login: '+error.message);
+  if(!data.session){
+    app().innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><h2 style="margin-top:0">📧 Check your email</h2>
+      <p>We sent a message to <b>${esc(email)}</b>. Open it and click the link to confirm your email.</p>
+      <p>Then come back here and sign in.</p><button class="btn big" style="width:100%" onclick="showLogin()">Go to Sign In</button></div>`;
+    return;
+  }
+  afterLogin();
+}
 async function doLogin(){
   const email=document.getElementById('em').value.trim(), password=document.getElementById('pw').value;
   busy('Signing in…');
   const {error}=await sb.auth.signInWithPassword({email,password});
-  if(error) return showLogin('That email or password is not right. Please try again.');
+  if(error) return showLogin(/confirm/i.test(error.message)?'Please confirm your email first: open the message we sent you and click the link.':'That email or password is not right. Please try again.');
   afterLogin();
 }
 async function afterLogin(){
@@ -719,7 +746,9 @@ async function afterLogin(){
   }
   sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
   const {data:{session}}=await sb.auth.getSession();
-  if(session) afterLogin(); else showLogin();
+  if(session) return afterLogin();
+  const {data:exists,error}=await sb.rpc('admin_exists');
+  if(!error && exists===false) showSetup(); else showLogin();
 })();
 </script>
 </body>
