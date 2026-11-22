@@ -13,6 +13,7 @@
 <link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
+<script src="install-steps.js"></script>
 <style>
   :root{--green:#1f6b3a;--green-dark:#154d29;--green-light:#e4f2e8;--gold:#c99a2e;--gold-light:#fbf3df;--red:#b3261e;
         --ink:#1b1f1c;--muted:#5b665e;--line:#d6ddd8;--bg:#f4f6f3;--card:#fff}
@@ -93,45 +94,46 @@ var onAndroid=/Android/i.test(UA);
 var installed=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 var installEvt=null;   // Android/Chrome: lets us show a real "Install App" button
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); installEvt=e; if($('installBox')) drawInstallBox(); });
-window.addEventListener('appinstalled',()=>{ installEvt=null; if($('installBox')) $('installBox').innerHTML=`<div class="card center"><h2 style="margin-top:0">✅ Installed!</h2><p>Close this page and open <b>League</b> from your Home Screen.</p></div>`; });
+window.addEventListener('appinstalled',()=>{ installEvt=null; if($('installBox')) installDone(); });
 var skippedInstall=false;   // only for this visit: the steps show again next time until installed
 var canInstall=()=>(onIOS||onAndroid) && !installed();
 var getAppBtn=()=>canInstall()?`<button onclick="showInstall()" style="background:#fff;color:var(--green)">📲 Get App</button>`:'';
 function wantInstallScreen(){ return canInstall() && !skippedInstall; }
+var instStep=0, instName='your league';
 async function showInstall(){
   $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
-  let name='your league';
-  if(slug){ const {data:info}=await sb.rpc('league_info',{s:slug}); if(info){ name=info.name; $('title').textContent='⛳ '+info.name;
-    document.querySelector('meta[name="apple-mobile-web-app-title"]').content=info.name.length>14?'League':info.name; } }
-  $('app').innerHTML=`<div class="center" style="margin-top:10px"><img src="icon-192.png" alt="" style="width:96px;height:96px;border-radius:22px;box-shadow:0 4px 14px rgba(0,0,0,.2)">
-    <h2 style="margin-bottom:4px">Get the ${esc(name)} app</h2><p class="muted" style="margin-top:0">Results, the money list and your stats, one tap away on your phone.</p></div>
-    <div id="installBox"></div>
-    <button class="btn ghost" style="margin-top:8px" onclick="skipInstall()">Not now – just look in the browser</button>
-    <p class="muted center">You can always come back to these steps with the <b>📲 Get App</b> button at the top.</p>`;
-  drawInstallBox();
+  if(slug){ const {data:info}=await sb.rpc('league_info',{s:slug}); if(info){ instName=info.name; $('title').textContent='⛳ '+info.name;
+ } }
+  instStep=0; drawInstallBox();
 }
+// One big step per screen, with a picture of the exact button to tap
 function drawInstallBox(){
-  const step=(n,html)=>`<div style="display:flex;gap:12px;align-items:flex-start;margin:12px 0"><b style="flex:none;width:32px;height:32px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center">${n}</b><div style="padding-top:4px">${html}</div></div>`;
-  let h;
-  if(installEvt){
-    h=`<div class="card"><button class="btn" style="font-size:1.3rem;padding:20px" onclick="doInstall()">📲 Install App</button>
-      <p class="muted center" style="margin-bottom:0">Then open <b>League</b> from your Home Screen.</p></div>`;
-  } else if(onIOS){
-    const otherBrowser=/CriOS|FxiOS|EdgiOS/.test(UA);
-    h=`<div class="card"><h3>Add it to your Home Screen:</h3>
-      ${step(1,otherBrowser?'Tap the <b>Share</b> button <span style="font-size:1.3em">⬆︎</span> in the address bar at the top':'Tap the <b>Share</b> button <span style="font-size:1.3em">⬆︎</span> at the bottom of the screen<br><span class="muted">(On newer iPhones, tap <b>⋯</b> first, then <b>Share</b>)</span>')}
-      ${step(2,'Scroll down and tap <b>Add to Home Screen</b> <span style="font-size:1.2em">⊞</span>')}
-      ${step(3,'Tap <b>Add</b> at the top right')}
-      ${step(4,'Close Safari and open <b>League</b> ⛳ from your Home Screen')}</div>
-      ${otherBrowser?'':`<div class="center" style="font-size:2.4rem;color:var(--green);animation:bob 1s ease-in-out infinite">⬇︎</div><p class="center muted" style="margin-top:0">The Share button is down here</p>`}`;
-  } else {
-    h=`<div class="card"><h3>Add it to your Home Screen:</h3>
-      ${step(1,'Tap the <b>⋮</b> menu at the top right of Chrome')}
-      ${step(2,'Tap <b>Install app</b> or <b>Add to Home screen</b>')}
-      ${step(3,'Tap <b>Install</b> / <b>Add</b>')}
-      ${step(4,'Open <b>League</b> ⛳ from your Home Screen')}</div>`;
+  const top=`<div class="center" style="margin-top:6px"><img src="icon-192.png" alt="" style="width:72px;height:72px;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,.2)">
+    <h2 style="margin:10px 0 4px">Get the ${esc(instName)} app</h2></div>`;
+  const later=`<button class="btn ghost" style="margin-top:14px" onclick="skipInstall()">Not now – just look in the browser</button>`;
+  if(installEvt){   // Android Chrome: one tap
+    $('app').innerHTML=top+`<div id="installBox" class="card center"><p style="font-size:1.15rem;margin-top:0">Tap the button to put the app on your phone.</p>
+      <button class="btn" style="font-size:1.35rem;padding:22px" onclick="doInstall()">📲 Install App</button></div>`+later;
+    return;
   }
-  $('installBox').innerHTML=h;
+  const S=INSTALL.steps(INSTALL.phoneKind()), st=S[instStep], last=instStep===S.length-1;
+  $('app').innerHTML=top+`<div id="installBox" class="card">
+      <div class="center muted" style="font-weight:700;letter-spacing:.5px">STEP ${instStep+1} OF ${S.length}</div>
+      <div class="center" style="margin:6px 0 12px">${S.map((_,i)=>`<span style="display:inline-block;width:12px;height:12px;border-radius:50%;margin:0 4px;background:${i<=instStep?'var(--green)':'var(--line)'}"></span>`).join('')}</div>
+      <h2 class="center" style="margin:0 0 8px;font-size:1.5rem">${st.title}</h2>
+      <p style="font-size:1.2rem;text-align:center;margin:0 0 14px">${st.text}</p>
+      ${st.pic}${st.extra||''}</div>
+    <div style="display:flex;gap:10px">
+      ${instStep>0?`<button class="btn ghost" style="flex:1" onclick="instStep--;drawInstallBox()">◀ Back</button>`:''}
+      ${last?`<button class="btn" style="flex:2" onclick="installDone()">Done ✓</button>`:`<button class="btn" style="flex:2;font-size:1.3rem" onclick="instStep++;drawInstallBox()">Next ▶</button>`}
+    </div>`+later;
+  scrollTo(0,0);
+}
+function installDone(){
+  $('app').innerHTML=`<div class="card center" style="margin-top:20px"><div style="display:flex;justify-content:center">${INSTALL.appIcon(96)}</div>
+    <h2>All set!</h2><p style="font-size:1.2rem">Go to your Home Screen and tap the <b>League</b> icon.</p>
+    <p class="muted">Don't see it? <a href="#" onclick="instStep=0;drawInstallBox();return false">Go through the steps again</a></p></div>
+    <button class="btn ghost" onclick="skipInstall()">Keep using it in the browser</button>`;
 }
 async function doInstall(){ if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt=null; drawInstallBox(); }
 function skipInstall(){ skippedInstall=true; startLeague(); }

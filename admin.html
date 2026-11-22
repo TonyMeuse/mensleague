@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="config.js"></script>
+<script src="install-steps.js"></script>
 <style>
   :root{
     --green:#1f6b3a; --green-dark:#154d29; --green-light:#e4f2e8;
@@ -95,6 +96,12 @@
   #qrsheet .addr{font-size:2rem;font-weight:800;margin:24px 0 10px;word-break:break-all}
   #qrsheet #qrbox{display:inline-block;padding:16px;background:#fff}
   #qrsheet p{font-size:1.3rem}
+  #qrsheet .addr{font-size:1.5rem;margin:10px 0 0}
+  #qrsteps{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left;max-width:760px;margin:0 auto}
+  #qrsteps .st{border:2px solid #cfd8d1;border-radius:14px;padding:10px;break-inside:avoid}
+  #qrsteps .st h3{margin:0 0 8px;font-size:1.1rem}
+  #qrsteps .st p{font-size:1rem;margin:8px 0 0}
+  @media print{ #qrsheet{padding-top:0} #qrsheet h1{font-size:2rem} }
   body.qr-printing header,body.qr-printing nav,body.qr-printing main{display:none!important}
   body.qr-printing #qrsheet{display:block}
   @media (max-width:800px){.scoreLayout{grid-template-columns:1fr}}
@@ -112,9 +119,10 @@
 <header><h1>⛳ League Manager</h1><span id="hdrInfo"></span><span id="saveStatus" class="status"></span></header>
 <nav id="nav" style="display:none"></nav>
 <main id="app"><div class="card empty">Loading…</div></main>
-<div id="qrsheet"><h1>⛳ Men's League</h1><p>Scan with your phone camera to see results, the money list and your stats.</p>
+<div id="qrsheet"><h1>⛳ League</h1><p>Point your phone's camera at the code and tap the link that appears.</p>
   <div id="qrbox"></div><div class="addr" id="qraddr"></div>
-  <p>Then tap <b>Share</b> → <b>Add to Home Screen</b>, and turn on alerts to be told when results are posted.</p></div>
+  <h2 style="margin:18px 0 8px">Put the app on your iPhone</h2><div id="qrsteps"></div>
+  <p style="font-size:1.05rem;margin-top:14px"><b>Android:</b> tap the three dots <b>⋮</b> at the top right → <b>Install app</b> → <b>Install</b>.</p></div>
 
 <script>
 /* ======================= DATA ======================= */
@@ -508,7 +516,8 @@ async function publishWeek(){
 }
 function printQR(){
   const box=document.getElementById('qrbox'); box.innerHTML='';
-  new QRCode(box,{text:golferUrl(),width:420,height:420,correctLevel:QRCode.CorrectLevel.M});
+  new QRCode(box,{text:golferUrl(),width:260,height:260,correctLevel:QRCode.CorrectLevel.M});
+  document.getElementById('qrsteps').innerHTML=INSTALL.steps('ios-safari').map((st,i)=>`<div class="st"><h3>${i+1}. ${st.title}</h3><p style="margin:0 0 8px">${st.text}</p>${st.pic}${st.extra||''}</div>`).join('');
   document.getElementById('qraddr').textContent=golferUrl().replace(/^https?:\/\//,'');
   document.querySelector('#qrsheet h1').textContent='⛳ '+league.name;
   document.body.classList.add('qr-printing');
