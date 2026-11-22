@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Men's League</title>
+<meta name="theme-color" content="#1f6b3a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="League">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root{--green:#1f6b3a;--green-dark:#154d29;--green-light:#e4f2e8;--gold:#c99a2e;--gold-light:#fbf3df;--red:#b3261e;
+        --ink:#1b1f1c;--muted:#5b665e;--line:#d6ddd8;--bg:#f4f6f3;--card:#fff}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{font-size:18px}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;line-height:1.35}
+  header{background:var(--green);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:1.25rem;flex:1}
+  header button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;font-weight:600}
+  main{padding:16px 16px calc(100px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+  .tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+  .tabs button{flex:1;border:0;background:none;padding:10px 0 12px;font-size:.85rem;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+  .tabs button span{font-size:1.5rem}
+  .tabs button.on{color:var(--green)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  h2{font-size:1.25rem;margin:18px 0 10px}
+  h3{font-size:1.05rem;margin:0 0 8px}
+  .btn{display:block;width:100%;font-size:1.15rem;font-weight:700;padding:16px;border-radius:14px;border:2px solid var(--green);background:var(--green);color:#fff;font-family:inherit}
+  .btn.ghost{background:#fff;color:var(--green)}
+  input,select{width:100%;font-size:1.2rem;padding:14px;border:2px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);font-family:inherit;-webkit-appearance:none}
+  input:focus,select:focus{outline:none;border-color:var(--green)}
+  .muted{color:var(--muted)}
+  .center{text-align:center}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:.98rem}
+  th{font-size:.75rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  .num{text-align:right}
+  tr.me td{background:var(--gold-light);font-weight:700}
+  .money{font-weight:700;color:var(--green-dark)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-weight:700;font-size:.8rem;background:var(--green-light);color:var(--green-dark)}
+  .big{font-size:2rem;font-weight:800;line-height:1.1}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .tile{background:var(--bg);border-radius:12px;padding:12px;text-align:center}
+  .tile .muted{font-size:.8rem}
+  .tile b{display:block;font-size:1.5rem}
+  .hero{background:var(--green);color:#fff;border:0}
+  .hero .muted{color:#cfe6d6}
+  details{background:#fff;border:1px solid var(--line);border-radius:16px;margin-bottom:12px}
+  summary{padding:16px;font-weight:800;font-size:1.1rem;list-style:none;display:flex;justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:'▾';color:var(--muted)}
+  details[open] summary::after{content:'▴'}
+  details .inner{padding:0 16px 16px}
+  .namelist button{display:block;width:100%;text-align:left;font-size:1.15rem;padding:15px;margin-bottom:8px;border:2px solid var(--line);border-radius:14px;background:#fff;font-family:inherit;color:var(--ink)}
+  .bar{height:10px;border-radius:5px;background:var(--green-light);overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--green)}
+  .err{background:#fbe9e7;color:var(--red);border-radius:12px;padding:12px;margin-bottom:12px;font-weight:600}
+</style>
+</head>
+<body>
+<header><h1>⛳ Men's League</h1><span id="hdrBtn"></span></header>
+<main id="app"><div class="card center muted">Loading…</div></main>
+<nav class="tabs" id="tabs" style="display:none"></nav>
+
+<script>
+const cfg=window.LEAGUE_CONFIG||{};
+let sb=null, data=null, tab='results', weekSel=null;
+let pw=get('ml.pw'), me=get('ml.me');
+function get(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
+function put(k,v){ try{ v==null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch(e){} }
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=x=>'$'+(Math.round((x||0)*100)/100).toFixed(2);
+const fmtDate=(s,long)=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString(undefined,long?{weekday:'long',month:'long',day:'numeric'}:{month:'short',day:'numeric'});};
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const one=x=>x==null?'—':(Math.round(x*10)/10).toFixed(1);
+const myName=()=>{const r=(data&&data.roster||[]).find(g=>g.id===me);return r?r.name:'';};
+
+/* ---------- start ---------- */
+(function boot(){
+  if(!window.supabase||!cfg.supabaseUrl){ $('app').innerHTML='<div class="card center">Can\'t connect right now. Please check your internet and try again.</div>'; return; }
+  sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:false}});
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker && navigator.serviceWorker.addEventListener('message',()=>refresh());
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&data) refresh(); });
+  if(pw) refresh(); else showPassword();
+})();
+
+async function refresh(){
+  const {data:d,error}=await sb.rpc('get_league_data',{pw});
+  if(error){
+    if(/wrong password/i.test(error.message)){ pw=null; put('ml.pw',null); return showPassword('The league password has changed. Please type the new one.'); }
+    if(!data){ $('app').innerHTML='<div class="card center">Can\'t load results. Please check your internet.<br><br><button class="btn" onclick="refresh()">Try Again</button></div>'; }
+    return;
+  }
+  data=d;
+  if(!me || !data.roster.some(g=>g.id===me)) return showPickName();
+  draw();
+}
+
+function showPassword(msg){
+  $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
+  $('app').innerHTML=`<div class="card" style="margin-top:30px"><h2 style="margin-top:0">Welcome!</h2>
+    <p class="muted">Type the league password to see results, the money list and your stats.</p>
+    ${msg?`<div class="err">${esc(msg)}</div>`:''}
+    <input id="pwin" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="League password" onkeydown="if(event.key==='Enter')tryPw()"><br><br>
+    <button class="btn" onclick="tryPw()">Open</button></div>`;
+}
+async function tryPw(){
+  const v=$('pwin').value.trim(); if(!v) return;
+  const {data:d,error}=await sb.rpc('get_league_data',{pw:v});
+  if(error) return showPassword(/wrong password/i.test(error.message)?'That password is not right. Please try again.':'Can\'t connect. Please check your internet.');
+  pw=v; put('ml.pw',v); data=d;
+  if(!me || !data.roster.some(g=>g.id===me)) return showPickName();
+  draw();
+}
+
+function showPickName(){
+  $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
+  $('app').innerHTML=`<h2>Who are you?</h2><p class="muted" style="margin-top:0">Pick your name once. This phone will remember it.</p>
+    <input placeholder="🔍 Type your name…" oninput="drawNames(this.value)" autocomplete="off"><br><br>
+    <div class="namelist" id="names"></div>
+    <button class="btn ghost" onclick="pickName(null)">Skip – just show results</button>`;
+  drawNames('');
+}
+function drawNames(q){
+  q=q.toLowerCase();
+  const list=[...data.roster].filter(g=>g.name.toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
+  $('names').innerHTML=list.map(g=>`<button onclick="pickName('${g.id}')">${esc(g.name)}</button>`).join('')||'<p class="muted">No names match.</p>';
+}
+async function pickName(id){
+  me=id||'none'; put('ml.me',me);
+  // move this phone's alerts to the new name
+  try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription();
+       if(sub && id) await sb.rpc('save_push_sub',{pw,golfer:id,sub:sub.toJSON()}); }catch(e){}
+  tab='results'; draw();
+}
+
+/* ---------- main screens ---------- */
+function draw(){
+  $('hdrBtn').innerHTML=`<button onclick="showPickName()">${me&&me!=='none'?esc(myName().split(' ')[0])+' ▾':'Pick name'}</button>`;
+  const T=[['results','🏆','Results'],['money','💰','Money List'],['me','📊','My Stats']];
+  $('tabs').style.display='flex';
+  $('tabs').innerHTML=T.map(([k,i,l])=>`<button class="${tab===k?'on':''}" onclick="tab='${k}';draw();scrollTo(0,0)"><span>${i}</span>${l}</button>`).join('');
+  $('app').innerHTML={results:rResults,money:rMoney,me:rMe}[tab]();
+  if(tab==='me') drawAlerts();
+  else if(tab==='results' && me!=='none') alertBanner();
+}
+
+function rResults(){
+  const weeks=data.weeks; if(!weeks.length) return '<div class="card center muted">No results posted yet.</div>';
+  if(!weeks.some(w=>w.date===weekSel)) weekSel=weeks[weeks.length-1].date;
+  const w=weeks.find(x=>x.date===weekSel), r=w.results, P=w.players;
+  let h=`<div id="alertBanner"></div><select onchange="weekSel=this.value;draw()">${[...weeks].reverse().map(x=>`<option value="${x.date}" ${x.date===weekSel?'selected':''}>${fmtDate(x.date,true)}</option>`).join('')}</select>
+    <p class="muted center">${esc(w.courseName)} · ${r.playerCount} players</p>`;
+  if(P[me]){
+    const fl=r.flights.find(f=>f.rows.some(x=>x.id===me)), row=fl&&fl.rows.find(x=>x.id===me), aw=fl&&fl.awards.find(a=>a.id===me), pay=r.payouts[me];
+    h+=`<div class="card hero"><div class="muted">Your night · ${esc(P[me].flight||'')}</div>
+      <div class="grid3" style="margin-top:8px"><div><div class="muted">Gross</div><div class="big">${row&&row.complete?row.gross:'—'}</div></div>
+      <div><div class="muted">Net</div><div class="big">${row&&row.complete?row.net:'—'}</div></div>
+      <div><div class="muted">Won</div><div class="big">${pay&&pay.total>0.004?money(pay.total):'$0'}</div></div></div>
+      ${aw?`<p style="margin:10px 0 0">🏆 ${aw.place} ${aw.cat}</p>`:''}</div>`;
+  }
+  const pays=Object.entries(r.payouts).map(([id,p])=>({id,...p})).filter(p=>p.total>0.004).sort((a,b)=>b.total-a.total);
+  h+=`<h2>Who won money</h2><div class="card"><table><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
+    ${pays.map(p=>`<tr class="${p.id===me?'me':''}"><td>${esc(p.name)}</td><td class="num">${p.round?money(p.round):''}</td><td class="num">${p.skins?money(p.skins):''}</td><td class="num">${p.par3?money(p.par3):''}</td><td class="num money">${money(p.total)}</td></tr>`).join('')}</table></div>`;
+  h+=`<h2>Par 3 skins</h2><div class="card"><table>${r.par3.map(p=>`<tr class="${p.winner===me?'me':''}"><td><b>#${p.hole}</b></td><td>${p.winner?`${esc(p.winnerName)} (${p.low})`:`<span class="muted">Tied – rolls over</span>`}</td><td class="num money">${money(p.pot)}</td></tr>`).join('')}</table>
+    ${r.rollover>0.004?`<p class="muted" style="margin-bottom:0">${money(r.rollover)} rolls over to next week.</p>`:''}</div>`;
+  h+='<h2>Flights</h2>';
+  r.flights.forEach(f=>{
+    const sk=r.mode==='gross'?'gross':'net', rows=[...f.rows].sort((a,b)=>(b.complete-a.complete)||a[sk]-b[sk]), aw=Object.fromEntries(f.awards.map(a=>[a.id,a]));
+    const mine=f.rows.some(x=>x.id===me);
+    h+=`<details ${mine?'open':''}><summary>${f.name}${mine?' · you':''}</summary><div class="inner">
+      <table><tr><th>Golfer</th><th class="num">Hcp</th><th class="num">Gross</th><th class="num">Net</th><th></th></tr>
+      ${rows.map(x=>`<tr class="${x.id===me?'me':''}"><td>${esc(x.name)}</td><td class="num">${x.ch}</td><td class="num">${x.complete?x.gross:'—'}</td><td class="num">${x.complete?x.net:'—'}</td><td>${aw[x.id]?`<span class="pill">${aw[x.id].place} ${aw[x.id].cat}</span>`:''}</td></tr>`).join('')}</table>
+      <h3 style="margin-top:16px">Skins (${f.skinsWon} won${f.skinsWon?`, ${money(f.skinValue)} each`:''})</h3>
+      <table>${f.holes.filter(x=>x.winner).map(x=>`<tr class="${x.winner===me?'me':''}"><td>#${x.hole}</td><td>${esc(x.winnerName)} (${x.low})</td></tr>`).join('')||'<tr><td class="muted">No skins won</td></tr>'}</table>
+    </div></details>`;
+  });
+  return h;
+}
+
+function seasonTotals(){
+  const s={};
+  data.weeks.forEach(w=>{
+    for(const id in w.players){ if(!s[id]) s[id]={id,name:w.players[id].name,round:0,skins:0,par3:0,total:0,played:0}; s[id].played++; }
+    for(const id in w.results.payouts){ const p=w.results.payouts[id]; if(!s[id]) continue; s[id].round+=p.round; s[id].skins+=p.skins; s[id].par3+=p.par3; s[id].total+=p.total; }
+  });
+  return Object.values(s);
+}
+function rMoney(){
+  if(!data.weeks.length) return '<div class="card center muted">No results posted yet.</div>';
+  const list=seasonTotals().filter(x=>x.total>0.004).sort((a,b)=>b.total-a.total);
+  return `<h2>Season money list</h2><p class="muted" style="margin-top:0">${data.weeks.length} week${data.weeks.length>1?'s':''} played</p>
+    <div class="card"><table><tr><th>#</th><th>Golfer</th><th class="num">Played</th><th class="num">Won</th></tr>
+    ${list.map((x,i)=>`<tr class="${x.id===me?'me':''}"><td>${i+1}</td><td>${esc(x.name)}</td><td class="num">${x.played}</td><td class="num money">${money(x.total)}</td></tr>`).join('')}</table></div>`;
+}
+
+function myStats(){
+  const rounds=[], dist={eagle:0,birdie:0,par:0,bogey:0,double:0,worse:0}, byPar={3:[],4:[],5:[]};
+  data.weeks.forEach(w=>{
+    const p=w.players[me]; if(!p) return;
+    const sc=(w.scores[me]||[]).map(Number), complete=sc.length>=18&&sc.slice(0,18).every(v=>v>0);
+    const pay=w.results.payouts[me]||{round:0,skins:0,par3:0,total:0};
+    const gross=complete?sc.slice(0,18).reduce((a,b)=>a+b,0):null;
+    rounds.push({date:w.date,gross,net:complete?gross-p.ch:null,ch:p.ch,pay});
+    if(!complete) return;
+    for(let h=0;h<18;h++){ const d=sc[h]-w.pars[h];
+      dist[d<=-2?'eagle':d===-1?'birdie':d===0?'par':d===1?'bogey':d===2?'double':'worse']++;
+      if(byPar[w.pars[h]]) byPar[w.pars[h]].push(sc[h]); }
+  });
+  return {rounds,dist,byPar};
+}
+function rMe(){
+  if(!me||me==='none') return `<div class="card center"><p>Pick your name to see your own stats.</p><button class="btn" onclick="showPickName()">Pick My Name</button></div>`;
+  const {rounds,dist,byPar}=myStats(), done=rounds.filter(r=>r.gross!=null);
+  const tot=k=>rounds.reduce((a,r)=>a+(r.pay[k]||0),0);
+  const holes=Object.values(dist).reduce((a,b)=>a+b,0)||1;
+  const bestG=done.length?Math.min(...done.map(r=>r.gross)):null, bestN=done.length?Math.min(...done.map(r=>r.net)):null;
+  const D=[['eagle','Eagle or better'],['birdie','Birdies'],['par','Pars'],['bogey','Bogeys'],['double','Double bogeys'],['worse','Triple or worse']];
+  return `<h2>${esc(myName())}</h2>
+  <div class="card hero"><div class="muted">Won this season</div><div class="big">${money(tot('total'))}</div>
+    <div class="grid3" style="margin-top:10px"><div><div class="muted">Round</div><b>${money(tot('round'))}</b></div><div><div class="muted">Skins</div><b>${money(tot('skins'))}</b></div><div><div class="muted">Par 3s</div><b>${money(tot('par3'))}</b></div></div></div>
+  <div class="grid2">
+    <div class="tile"><div class="muted">Rounds played</div><b>${rounds.length}</b></div>
+    <div class="tile"><div class="muted">Avg gross</div><b>${one(avg(done.map(r=>r.gross)))}</b></div>
+    <div class="tile"><div class="muted">Best gross</div><b>${bestG??'—'}</b></div>
+    <div class="tile"><div class="muted">Avg net</div><b>${one(avg(done.map(r=>r.net)))}</b></div>
+    <div class="tile"><div class="muted">Best net</div><b>${bestN??'—'}</b></div>
+    <div class="tile"><div class="muted">Handicap now</div><b>${rounds.length?rounds[rounds.length-1].ch:'—'}</b></div>
+  </div>
+  <h2>Scoring</h2><div class="card">
+    ${D.map(([k,l])=>`<div style="display:flex;justify-content:space-between;margin-top:8px"><span>${l}</span><b>${dist[k]}</b></div><div class="bar"><i style="width:${dist[k]/holes*100}%"></i></div>`).join('')}
+    <div class="grid3" style="margin-top:16px">${[3,4,5].map(p=>`<div class="tile"><div class="muted">Avg on par ${p}s</div><b>${one(avg(byPar[p]))}</b></div>`).join('')}</div></div>
+  <h2>My rounds</h2><div class="card">${rounds.length?`<table><tr><th>Date</th><th class="num">Gross</th><th class="num">Net</th><th class="num">Won</th></tr>
+    ${[...rounds].reverse().map(r=>`<tr><td>${fmtDate(r.date)}</td><td class="num">${r.gross??'—'}</td><td class="num">${r.net??'—'}</td><td class="num money">${r.pay.total>0.004?money(r.pay.total):''}</td></tr>`).join('')}</table>`:'<p class="muted">No rounds yet.</p>'}</div>
+  <h2>Alerts</h2><div class="card" id="alerts"><p class="muted">Checking…</p></div>
+  <button class="btn ghost" onclick="showPickName()">Not ${esc(myName().split(' ')[0])}? Change name</button>`;
+}
+
+/* ---------- phone alerts ---------- */
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+async function alertState(){
+  if(isIOS && !isStandalone()) return 'needs-home';
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!cfg.vapidPublicKey) return 'unsupported';
+  if(Notification.permission==='denied') return 'blocked';
+  try{ const reg=await navigator.serviceWorker.ready; return (await reg.pushManager.getSubscription())?'on':'off'; }catch(e){ return 'off'; }
+}
+async function drawAlerts(){
+  const el=$('alerts'); if(!el) return; const s=await alertState();
+  el.innerHTML={
+    'on':`<p style="margin-top:0">✅ Alerts are <b>on</b>. You'll get a message when results are posted for a week you played.</p><button class="btn ghost" onclick="alertsOff()">Turn Alerts Off</button>`,
+    'off':`<p style="margin-top:0">Get a message on this phone when results are posted for a week you played.</p><button class="btn" onclick="alertsOn()">🔔 Turn On Alerts</button>`,
+    'blocked':`<p style="margin:0">Alerts are blocked on this phone. To allow them, open your phone's <b>Settings → Notifications → League</b> and turn on <b>Allow Notifications</b>.</p>`,
+    'needs-home':`<p style="margin-top:0">To get alerts on iPhone, add this app to your Home Screen first:</p><ol style="margin:0;padding-left:22px;line-height:1.7"><li>Tap the <b>Share</b> button <b>⬆︎</b> at the bottom of Safari</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b></li><li>Open <b>League</b> from your Home Screen and come back here</li></ol>`,
+    'unsupported':`<p style="margin:0" class="muted">This phone or browser can't receive alerts. Try Safari on iPhone or Chrome on Android.</p>`
+  }[s];
+}
+async function alertBanner(){
+  const el=$('alertBanner'); if(!el) return; const s=await alertState();
+  if(s==='off'||s==='needs-home') el.innerHTML=`<div class="card" style="display:flex;gap:10px;align-items:center"><span style="flex:1">🔔 Want a message when results are posted?</span><button class="btn" style="width:auto;padding:10px 14px;font-size:1rem" onclick="tab='me';draw();setTimeout(()=>$('alerts').scrollIntoView({behavior:'smooth'}),50)">Set up</button></div>`;
+}
+function b64u(s){ const p='='.repeat((4-s.length%4)%4), b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from(b,c=>c.charCodeAt(0)); }
+async function alertsOn(){
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted') return drawAlerts();
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(cfg.vapidPublicKey)});
+    const {error}=await sb.rpc('save_push_sub',{pw,golfer:me,sub:sub.toJSON()});
+    if(error) throw error;
+  }catch(e){ console.error(e); alert('Could not turn on alerts. Please try again.'); }
+  drawAlerts();
+}
+async function alertsOff(){
+  try{ const reg=await navigator.serviceWorker.ready, sub=await reg.pushManager.getSubscription();
+    if(sub){ await sb.rpc('remove_push_sub',{pw,endpoint:sub.endpoint}); await sub.unsubscribe(); } }catch(e){ console.error(e); }
+  drawAlerts();
+}
+</script>
+</body>
+</html>

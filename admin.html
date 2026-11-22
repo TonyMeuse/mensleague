@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>League Admin</title>
+<link rel="icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root{
+    --green:#1f6b3a; --green-dark:#154d29; --green-light:#e4f2e8;
+    --gold:#c99a2e; --red:#b3261e; --red-light:#fbe9e7;
+    --ink:#1b1f1c; --muted:#5b665e; --line:#cfd8d1; --bg:#f4f6f3; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  html{font-size:20px}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;line-height:1.35}
+  header{background:var(--green);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+  header h1{margin:0;font-size:1.5rem;letter-spacing:.5px}
+  nav{display:flex;gap:8px;flex-wrap:wrap;background:var(--green-dark);padding:10px 16px;position:sticky;top:0;z-index:10}
+  nav button{background:transparent;color:#fff;border:2px solid transparent;font-size:1.05rem;font-weight:600;padding:12px 20px;border-radius:12px;cursor:pointer;min-height:56px}
+  nav button.on{background:#fff;color:var(--green-dark)}
+  nav button:hover:not(.on){border-color:rgba(255,255,255,.5)}
+  main{padding:20px 24px 80px;max-width:1300px;margin:0 auto}
+  h2{font-size:1.4rem;margin:24px 0 12px}
+  h3{font-size:1.15rem;margin:0 0 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:18px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+  label{display:block;font-weight:600;font-size:.9rem;color:var(--muted);margin-bottom:6px}
+  input,select{font-size:1.2rem;padding:12px 14px;border:2px solid var(--line);border-radius:12px;min-height:56px;background:#fff;color:var(--ink);font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px var(--green-light)}
+  textarea{font-size:1.05rem;padding:12px;border:2px solid var(--line);border-radius:12px;width:100%;min-height:160px;font-family:inherit}
+  .btn{font-size:1.1rem;font-weight:700;padding:14px 24px;border-radius:12px;border:2px solid var(--green);background:var(--green);color:#fff;cursor:pointer;min-height:56px;font-family:inherit}
+  .btn:hover{background:var(--green-dark)}
+  .btn.ghost{background:#fff;color:var(--green)}
+  .btn.ghost:hover{background:var(--green-light)}
+  .btn.danger{background:#fff;color:var(--red);border-color:var(--red)}
+  .btn.danger:hover{background:var(--red-light)}
+  .btn.small{font-size:.95rem;padding:8px 14px;min-height:44px}
+  .btn.big{font-size:1.3rem;padding:18px 32px;min-height:68px}
+  .seg{display:flex;gap:0;flex-wrap:wrap}
+  .seg button{font-size:1.1rem;font-weight:700;padding:14px 26px;min-height:56px;border:2px solid var(--green);background:#fff;color:var(--green);cursor:pointer;font-family:inherit}
+  .seg button:first-child{border-radius:12px 0 0 12px}
+  .seg button:last-child{border-radius:0 12px 12px 0}
+  .seg button+button{border-left:none}
+  .seg button.on{background:var(--green);color:#fff}
+  .muted{color:var(--muted)}
+  .namegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}
+  .namebtn{font-size:1.1rem;font-weight:600;padding:14px;min-height:64px;border-radius:12px;border:2px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;text-align:left;font-family:inherit}
+  .namebtn small{display:block;font-weight:400;color:var(--muted);font-size:.85rem}
+  .namebtn.on{background:var(--green);border-color:var(--green);color:#fff}
+  .namebtn.on small{color:#d7eadc}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:1.05rem}
+  th{font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  td.num,th.num{text-align:right}
+  .pill{display:inline-block;padding:4px 12px;border-radius:999px;font-weight:700;font-size:.9rem}
+  .pill.yes{background:var(--green-light);color:var(--green-dark)}
+  .pill.no{background:#eee;color:#777}
+  .stat{display:inline-block;margin-right:28px}
+  .stat b{display:block;font-size:1.6rem}
+  .flights{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+  .flight h3{display:flex;justify-content:space-between}
+  .fl-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .fl-row .nm{flex:1;font-weight:600}
+  .scoreLayout{display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}
+  .plist button{display:flex;justify-content:space-between;width:100%;font-size:1.05rem;padding:12px 14px;min-height:54px;margin-bottom:6px;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;color:var(--ink)}
+  .plist button.on{border-color:var(--green);background:var(--green-light);font-weight:700}
+  .plist button .ok{color:var(--green);font-weight:700}
+  .plist h4{margin:14px 0 6px;color:var(--muted)}
+  .card-grid{display:grid;grid-template-columns:90px repeat(9,1fr) 80px;gap:6px;align-items:center;margin-bottom:14px}
+  .card-grid .h{text-align:center;font-weight:700;color:var(--muted);font-size:.9rem}
+  .card-grid .par{text-align:center;font-size:.95rem;color:var(--muted)}
+  .card-grid .lbl{font-weight:700}
+  .card-grid input{width:100%;text-align:center;font-size:1.6rem;font-weight:700;padding:8px 0;min-height:64px}
+  .card-grid input.p3{border-color:var(--gold)}
+  .card-grid .tot{text-align:center;font-size:1.5rem;font-weight:800}
+  .bigtotals{display:flex;gap:40px;margin-top:10px;font-size:1.2rem}
+  .bigtotals b{font-size:2rem;display:block}
+  .warn{background:#fff6e0;border:2px solid var(--gold);border-radius:12px;padding:12px 16px;margin-bottom:14px}
+  .money{font-weight:700;color:var(--green-dark)}
+  .empty{padding:40px;text-align:center;color:var(--muted);font-size:1.2rem}
+  .pars{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+  .pars input{width:100%;text-align:center;padding:8px 0}
+  .pars div{text-align:center;font-size:.85rem;color:var(--muted);font-weight:700}
+  .print-only{display:none}
+  .status{margin-left:auto;font-weight:700;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.15)}
+  .status.ok{background:rgba(255,255,255,.2)}
+  .status.bad{background:#fff;color:var(--red)}
+  #qrsheet{display:none;text-align:center;padding-top:40px}
+  #qrsheet h1{font-size:2.6rem;margin:0 0 10px}
+  #qrsheet .addr{font-size:2rem;font-weight:800;margin:24px 0 10px;word-break:break-all}
+  #qrsheet #qrbox{display:inline-block;padding:16px;background:#fff}
+  #qrsheet p{font-size:1.3rem}
+  body.qr-printing header,body.qr-printing nav,body.qr-printing main{display:none!important}
+  body.qr-printing #qrsheet{display:block}
+  @media (max-width:800px){.scoreLayout{grid-template-columns:1fr}}
+  @media print{
+    html{font-size:13px}
+    nav,header,.noprint,.btn{display:none!important}
+    .print-only{display:block}
+    body{background:#fff}
+    main{padding:0}
+    .card{border:1px solid #999;break-inside:avoid;padding:10px;margin-bottom:8px}
+  }
+</style>
+</head>
+<body>
+<header><h1>⛳ Men's League Admin</h1><span id="hdrInfo"></span><span id="saveStatus" class="status"></span></header>
+<nav id="nav" style="display:none"></nav>
+<main id="app"><div class="card empty">Loading…</div></main>
+<div id="qrsheet"><h1>⛳ Men's League</h1><p>Scan with your phone camera to see results, the money list and your stats.</p>
+  <div id="qrbox"></div><div class="addr" id="qraddr"></div>
+  <p>Then tap <b>Share</b> → <b>Add to Home Screen</b>, and turn on alerts to be told when results are posted.</p></div>
+
+<script>
+/* ======================= DATA ======================= */
+const KEY = 'mensLeague.v1';
+const TABS = [
+  ['checkin','1. Check-In'],['flights','2. Flights'],['scores','3. Scores'],['results','4. Results'],
+  ['roster','Roster'],['history','History'],['settings','Settings']
+];
+let db, state = {tab:'checkin', search:'', scoreId:null, editCourse:null, viewWeek:null};
+
+function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function uid(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function newWeek(courseId){return {date:todayStr(),courseId:courseId||null,players:{},flights:null,flightsKey:'',scores:{}}}
+function defaultDB(){return {
+  golfers:[], courses:[], history:[],
+  settings:{roundFee:20, skinsFee:10, mode:'both', places:3, pct:{1:[100],2:[60,40],3:[50,30,20]}},
+  week:newWeek(null)
+}}
+/* Everything is stored online in Supabase (one record holds the whole league). */
+let sb=null, saveTimer=null, saving=false, again=false, dirty=false;
+function normalize(){
+  const d=defaultDB();
+  for(const k in d) if(db[k]===undefined) db[k]=d[k];
+  for(const k in d.settings) if(db.settings[k]===undefined) db.settings[k]=d.settings[k];
+}
+function setStatus(t,cls){ const e=document.getElementById('saveStatus'); e.textContent=t; e.className='status '+(cls||''); }
+async function loadRemote(){
+  const {data,error}=await sb.from('league_state').select('data').eq('id',1).maybeSingle();
+  if(error) throw error;
+  db=data?data.data:defaultDB(); normalize(); return !data;
+}
+function save(){
+  try{ localStorage.setItem(KEY+'.copy', JSON.stringify(db)); }catch(e){}
+  dirty=true; setStatus('Saving…'); clearTimeout(saveTimer); saveTimer=setTimeout(flush,700);
+}
+async function flush(){
+  clearTimeout(saveTimer);
+  if(saving){ again=true; return; }
+  saving=true; dirty=false;
+  const {error}=await sb.from('league_state').upsert({id:1,data:db,updated_at:new Date().toISOString()});
+  saving=false;
+  if(error){ dirty=true; console.error(error); setStatus('⚠ NOT SAVED – check internet','bad'); saveTimer=setTimeout(flush,5000); return false; }
+  if(again){ again=false; return flush(); }
+  if(!dirty) setStatus('✓ Saved','ok');
+  return true;
+}
+window.addEventListener('beforeunload',e=>{ if(dirty||saving){ e.preventDefault(); e.returnValue=''; } });
+
+/* ======================= HELPERS ======================= */
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=x=>'$'+(Math.round((x||0)*100)/100).toFixed(2);
+const ordinal=n=>n+(['th','st','nd','rd'][(n%100-20)%10]||['th','st','nd','rd'][n%100]||'th');
+const golfer=id=>db.golfers.find(g=>g.id===id);
+const getCourse=id=>db.courses.find(c=>c.id===id);
+const coursePar=c=>c.pars.reduce((a,b)=>a+b,0);
+function parseIndex(v){ v=String(v).trim(); if(v==='') return null; const plus=v.startsWith('+'); const n=parseFloat(v.replace('+','')); if(isNaN(n)) return null; return plus?-n:n; }
+function showIndex(n){ if(n==null) return '—'; return n<0?'+'+(-n).toFixed(1):(+n).toFixed(1); }
+function courseHcp(index,c){ if(!c||index==null) return 0; return Math.round(index*c.slope/113 + (c.rating - coursePar(c))); }
+function fmtDate(s){ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
+
+function weekPlayers(){
+  const w=db.week, c=getCourse(w.courseId);
+  return Object.keys(w.players).map(id=>{const g=golfer(id); if(!g) return null;
+    return {id,name:g.name,index:g.index,ch:courseHcp(g.index,c),skins:!!w.players[id].skins};}).filter(Boolean);
+}
+function flightCount(n){ return n<10?1:Math.floor(n/10); }
+function makeFlights(players){
+  const p=[...players].sort((a,b)=>a.ch-b.ch || (a.index??0)-(b.index??0) || a.name.localeCompare(b.name));
+  const n=p.length; if(!n) return [];
+  const F=flightCount(n), base=Math.floor(n/F), rem=n%F, out=[]; let k=0;
+  for(let i=0;i<F;i++){ const size=base+(i>=F-rem?1:0); out.push(p.slice(k,k+size).map(x=>x.id)); k+=size; }
+  return out;
+}
+function ensureFlights(force){
+  const ps=weekPlayers(); const key=db.week.courseId+'|'+ps.map(p=>p.id).sort().join(',');
+  if(force || !db.week.flights || db.week.flightsKey!==key){ db.week.flights=makeFlights(ps); db.week.flightsKey=key; save(); }
+  return db.week.flights;
+}
+
+/* ======================= CALCULATIONS ======================= */
+// Awards places across one or more categories (Gross / Net). A golfer can win only once:
+// the highest-paying open place is always filled first. Tied golfers split the places they cover.
+function awardPlaces(cats,places,pct){
+  const out=[], taken=new Set();
+  cats.forEach(c=>{c.next=0;c.amounts=pct.slice(0,places).map(p=>c.purse*(+p||0)/100);});
+  for(;;){
+    let best=null;
+    for(const c of cats){
+      if(c.next>=places) continue;
+      const rem=c.list.filter(x=>!taken.has(x.id)); if(!rem.length) continue;
+      const v=c.amounts[c.next];
+      if(!best || v>best.v+1e-9) best={c,v,rem};
+    }
+    if(!best) break;
+    const {c,rem}=best, top=rem[0].score, grp=rem.filter(x=>x.score===top);
+    const end=Math.min(c.next+grp.length,places); let sum=0;
+    for(let i=c.next;i<end;i++) sum+=c.amounts[i];
+    const label=(grp.length>1?'T-':'')+ordinal(c.next+1);
+    grp.forEach(x=>{taken.add(x.id); out.push({id:x.id,cat:c.key,place:label,placeNum:c.next+1,score:x.score,amount:sum/grp.length});});
+    c.next+=grp.length;
+  }
+  return out;
+}
+function sortedHistory(){ return [...db.history].sort((a,b)=>a.date.localeCompare(b.date)||a.savedAt-b.savedAt); }
+// Par 3 money rolls over week to week, per hole, until someone wins that hole outright.
+function carryFor(course,holeIdx,beforeDate){
+  let carry=+((course.startCarry||{})[holeIdx]||0);
+  for(const wk of sortedHistory()){
+    if(wk.courseId!==course.id || wk.date>=beforeDate) continue;
+    const p=(wk.results.par3||[]).find(x=>x.holeIdx===holeIdx); if(!p) continue;
+    const pot=p.base+carry; carry=p.winner?0:pot;
+  }
+  return carry;
+}
+function computeResults(){
+  const w=db.week, c=getCourse(w.courseId), s=db.settings;
+  if(!c) return null;
+  ensureFlights();
+  const P=Object.fromEntries(weekPlayers().map(p=>[p.id,p]));
+  const pars=c.pars, par3Holes=pars.map((p,i)=>p===3?i:-1).filter(i=>i>=0), otherHoles=18-par3Holes.length;
+  const res={date:w.date,courseId:c.id,courseName:c.name,mode:s.mode,places:s.places,roundFee:s.roundFee,skinsFee:s.skinsFee,
+             flights:[],par3:[],payouts:{},warnings:[],playerCount:Object.keys(P).length,skinsCount:0};
+  const pay=(id,k,amt)=>{ if(!res.payouts[id]) res.payouts[id]={name:P[id].name,round:0,skins:0,par3:0}; res.payouts[id][k]+=amt; };
+  const sc=id=>w.scores[id]||[];
+  const hole=(id,h)=>{const v=+sc(id)[h]; return v>0?v:0;};
+  const isComplete=id=>{for(let h=0;h<18;h++) if(!hole(id,h)) return false; return true;};
+  const gross=id=>{let t=0; for(let h=0;h<18;h++) t+=hole(id,h); return t;};
+  const pct=s.pct[s.places]||[];
+
+  (w.flights||[]).forEach((ids,fi)=>{
+    ids=ids.filter(id=>P[id]); if(!ids.length) return;
+    const name='Flight '+String.fromCharCode(65+fi);
+    const rows=ids.map(id=>({id,name:P[id].name,ch:P[id].ch,skins:P[id].skins,complete:isComplete(id),gross:gross(id),net:gross(id)-P[id].ch}));
+    rows.filter(r=>!r.complete).forEach(r=>res.warnings.push(`${r.name} (${name}) does not have all 18 scores entered — not counted for prizes.`));
+    const done=rows.filter(r=>r.complete);
+    const purse=s.roundFee*ids.length, share=s.mode==='both'?0.5:1, cats=[];
+    if(s.mode!=='net') cats.push({key:'Gross',purse:purse*share,list:[...done].sort((a,b)=>a.gross-b.gross).map(r=>({id:r.id,score:r.gross}))});
+    if(s.mode!=='gross') cats.push({key:'Net',purse:purse*share,list:[...done].sort((a,b)=>a.net-b.net).map(r=>({id:r.id,score:r.net}))});
+    const awards=awardPlaces(cats,s.places,pct);
+    awards.forEach(a=>{a.name=P[a.id].name; pay(a.id,'round',a.amount);});
+    const unpaid=cats.reduce((t,c)=>t+c.amounts.slice(c.next).reduce((a,b)=>a+b,0),0);
+    if(done.length && unpaid>0.004) res.warnings.push(`${name}: ${money(unpaid)} of round money was not paid out (not enough golfers for every place).`);
+
+    const sp=rows.filter(r=>r.skins);
+    const skinsPot=s.skinsFee*sp.length*otherHoles/18, holes=[];
+    for(let h=0;h<18;h++){ if(pars[h]===3) continue;
+      const hs=sp.map(r=>({id:r.id,v:hole(r.id,h)})).filter(x=>x.v>0);
+      if(!hs.length){holes.push({hole:h+1,low:null,winner:null,tied:0});continue;}
+      const low=Math.min(...hs.map(x=>x.v)), at=hs.filter(x=>x.v===low);
+      holes.push({hole:h+1,low,winner:at.length===1?at[0].id:null,winnerName:at.length===1?P[at[0].id].name:null,tied:at.length});
+    }
+    const won=holes.filter(x=>x.winner), skinValue=won.length?skinsPot/won.length:0;
+    won.forEach(x=>pay(x.winner,'skins',skinValue));
+    if(!won.length && skinsPot>0) res.warnings.push(`${name}: no skins were won, so ${money(skinsPot)} of skins money was not paid out.`);
+    res.flights.push({name,rows,purse,awards,skinsPot,skinsPlayers:sp.length,holes,skinsWon:won.length,skinValue});
+  });
+
+  const allSkins=Object.values(P).filter(p=>p.skins); res.skinsCount=allSkins.length;
+  const base=s.skinsFee*allSkins.length/18;
+  par3Holes.forEach(h=>{
+    const carryIn=carryFor(c,h,w.date), pot=base+carryIn;
+    const hs=allSkins.map(p=>({id:p.id,v:hole(p.id,h)})).filter(x=>x.v>0);
+    let low=null,winner=null,tied=0;
+    if(hs.length){ low=Math.min(...hs.map(x=>x.v)); const at=hs.filter(x=>x.v===low); tied=at.length; if(at.length===1) winner=at[0].id; }
+    if(winner) pay(winner,'par3',pot);
+    res.par3.push({holeIdx:h,hole:h+1,base,carryIn,pot,low,tied,winner,winnerName:winner?P[winner].name:null});
+  });
+
+  let paid=0; for(const id in res.payouts){const p=res.payouts[id]; p.total=p.round+p.skins+p.par3; paid+=p.total;}
+  res.collectedRound=s.roundFee*res.playerCount;
+  res.collectedSkins=s.skinsFee*res.skinsCount;
+  res.paid=paid;
+  res.rollover=res.par3.filter(p=>!p.winner).reduce((a,p)=>a+p.pot,0);
+  res.carryInTotal=res.par3.reduce((a,p)=>a+p.carryIn,0);
+  return res;
+}
+
+/* ======================= RENDER: SHELL ======================= */
+function render(){
+  document.getElementById('nav').innerHTML=TABS.map(([k,l])=>`<button class="${state.tab===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
+  const c=getCourse(db.week.courseId);
+  document.getElementById('hdrInfo').textContent=`${fmtDate(db.week.date)}${c?' · '+c.name:''} · ${Object.keys(db.week.players).length} playing`;
+  const fn={checkin:rCheckin,flights:rFlights,scores:rScores,results:rResults,roster:rRoster,history:rHistory,settings:rSettings}[state.tab];
+  document.getElementById('app').innerHTML=fn();
+  if(state.tab==='scores') focusFirstEmpty();
+}
+function go(t){ state.tab=t; state.viewWeek=null; render(); window.scrollTo(0,0); }
+function needCourse(){ return `<div class="card empty">First, add your course in <b>Settings</b>.<br><br><button class="btn big" onclick="go('settings')">Go to Settings</button></div>`; }
+
+/* ======================= CHECK-IN ======================= */
+function rCheckin(){
+  if(!db.courses.length) return needCourse();
+  if(!db.golfers.length) return `<div class="card empty">Your roster is empty. Add golfers first.<br><br><button class="btn big" onclick="go('roster')">Go to Roster</button></div>`;
+  const w=db.week, ps=weekPlayers(), n=ps.length, F=n?flightCount(n):0;
+  const sizes=n?makeFlights(ps).map(f=>f.length).join(' / '):'';
+  return `
+  <div class="card"><div class="row">
+    <div><label>League date</label><input type="date" value="${w.date}" onchange="db.week.date=this.value;save();render()"></div>
+    <div><label>Course</label><select onchange="db.week.courseId=this.value;save();render()">${db.courses.map(c=>`<option value="${c.id}" ${c.id===w.courseId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div style="flex:1"></div>
+    <button class="btn danger" onclick="newWeekConfirm()">Start New Week</button>
+  </div></div>
+  <div class="card">
+    <div class="stat"><span class="muted">Playing</span><b>${n}</b></div>
+    <div class="stat"><span class="muted">In skins</span><b>${ps.filter(p=>p.skins).length}</b></div>
+    <div class="stat"><span class="muted">Flights</span><b>${F}${n?` <span class="muted" style="font-size:1rem">(${sizes})</span>`:''}</b></div>
+  </div>
+  <h2>Tap each golfer who is playing</h2>
+  <input id="search" style="width:100%" placeholder="🔍  Type a name to find a golfer…" value="${esc(state.search)}" oninput="state.search=this.value;drawGrid()">
+  <div id="grid" class="namegrid">${gridHTML()}</div>
+  <h2>Playing this week (${n})</h2>
+  ${n?`<div class="card"><table><tr><th>Name</th><th class="num">Index</th><th class="num">Course Hcp</th><th>Skins</th><th></th></tr>
+  ${[...ps].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${showIndex(p.index)}</td><td class="num">${p.ch}</td>
+    <td><button class="btn small ${p.skins?'':'ghost'}" onclick="toggleSkins('${p.id}')">${p.skins?'✓ In skins':'Not in skins'}</button></td>
+    <td><button class="btn small danger" onclick="togglePlay('${p.id}')">Remove</button></td></tr>`).join('')}</table></div>`:'<p class="muted">Nobody checked in yet.</p>'}
+  `;
+}
+function gridHTML(){
+  const q=state.search.trim().toLowerCase();
+  const list=db.golfers.filter(g=>g.active!==false && (!q||g.name.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!list.length) return '<p class="muted">No golfers match.</p>';
+  return list.map(g=>`<button class="namebtn ${db.week.players[g.id]?'on':''}" onclick="togglePlay('${g.id}')">${db.week.players[g.id]?'✓ ':''}${esc(g.name)}<small>Index ${showIndex(g.index)}</small></button>`).join('');
+}
+function drawGrid(){ document.getElementById('grid').innerHTML=gridHTML(); }
+function togglePlay(id){ const w=db.week; if(w.players[id]) delete w.players[id]; else w.players[id]={skins:true}; save(); render(); const s=document.getElementById('search'); if(s&&state.search){s.focus();} }
+function toggleSkins(id){ db.week.players[id].skins=!db.week.players[id].skins; save(); render(); }
+function newWeekConfirm(){
+  const hasScores=Object.values(db.week.scores).some(a=>a&&a.some(v=>v));
+  if(hasScores && !confirm('This week has scores that have NOT been published. Start a new week anyway and lose them?')) return;
+  if(!hasScores && !confirm('Clear the check-in list and start a new week?')) return;
+  db.week=newWeek(db.week.courseId||(db.courses[0]||{}).id); state.scoreId=null; save(); render();
+}
+
+/* ======================= FLIGHTS ======================= */
+function rFlights(){
+  if(!db.courses.length) return needCourse();
+  const ps=weekPlayers(); if(!ps.length) return `<div class="card empty">Nobody is checked in yet.<br><br><button class="btn big" onclick="go('checkin')">Go to Check-In</button></div>`;
+  const P=Object.fromEntries(ps.map(p=>[p.id,p])), fl=ensureFlights();
+  return `<div class="row noprint" style="margin-bottom:16px"><p class="muted" style="flex:1;margin:0">Flights are made by course handicap, lowest in Flight A. Use ▲ ▼ to move a golfer to another flight.</p>
+    <button class="btn ghost" onclick="if(confirm('Re-make flights by handicap? Any manual moves will be undone.')){ensureFlights(true);render()}">Re-make Flights</button>
+    <button class="btn" onclick="window.print()">Print</button></div>
+  <div class="flights">${fl.map((ids,fi)=>`<div class="card flight"><h3><span>Flight ${String.fromCharCode(65+fi)}</span><span class="muted">${ids.length} players</span></h3>
+    ${ids.map(id=>P[id]).filter(Boolean).sort((a,b)=>a.ch-b.ch).map(p=>`<div class="fl-row"><span class="nm">${esc(p.name)}</span><span class="muted">${p.ch}</span>
+      <span class="noprint">${fi>0?`<button class="btn small ghost" onclick="moveFlight('${p.id}',${fi},-1)">▲</button>`:''}${fi<fl.length-1?` <button class="btn small ghost" onclick="moveFlight('${p.id}',${fi},1)">▼</button>`:''}</span></div>`).join('')}
+  </div>`).join('')}</div>`;
+}
+function moveFlight(id,fi,d){ const f=db.week.flights; f[fi]=f[fi].filter(x=>x!==id); f[fi+d].push(id); save(); render(); }
+
+/* ======================= SCORES ======================= */
+function rScores(){
+  const c=getCourse(db.week.courseId); if(!c) return needCourse();
+  const ps=weekPlayers(); if(!ps.length) return `<div class="card empty">Nobody is checked in yet.<br><br><button class="btn big" onclick="go('checkin')">Go to Check-In</button></div>`;
+  const P=Object.fromEntries(ps.map(p=>[p.id,p])), fl=ensureFlights();
+  const order=fl.flatMap(ids=>ids.filter(id=>P[id]).sort((a,b)=>P[a].name.localeCompare(P[b].name)));
+  if(!state.scoreId || !P[state.scoreId]) state.scoreId=order[0];
+  const filled=id=>(db.week.scores[id]||[]).filter(v=>v>0).length;
+  const tot=id=>(db.week.scores[id]||[]).reduce((a,b)=>a+(+b||0),0);
+  const list=fl.map((ids,fi)=>`<h4>Flight ${String.fromCharCode(65+fi)}</h4>`+ids.filter(id=>P[id]).sort((a,b)=>P[a].name.localeCompare(P[b].name)).map(id=>
+    `<button class="${id===state.scoreId?'on':''}" onclick="state.scoreId='${id}';render()"><span>${esc(P[id].name)}</span>${filled(id)===18?`<span class="ok">${tot(id)} ✓</span>`:`<span class="muted">${filled(id)}/18</span>`}</button>`).join('')).join('');
+  const p=P[state.scoreId], s=db.week.scores[p.id]||[];
+  const half=(start,lbl)=>{
+    let h=`<div class="h lbl">Hole</div>`; for(let i=start;i<start+9;i++) h+=`<div class="h">${i+1}</div>`; h+=`<div class="h">${lbl}</div>`;
+    h+=`<div class="par lbl">Par</div>`; for(let i=start;i<start+9;i++) h+=`<div class="par">${c.pars[i]}</div>`; h+=`<div class="par">${c.pars.slice(start,start+9).reduce((a,b)=>a+b,0)}</div>`;
+    h+=`<div class="lbl">Score</div>`; for(let i=start;i<start+9;i++) h+=`<input id="h${i}" class="${c.pars[i]===3?'p3':''}" inputmode="numeric" autocomplete="off" value="${s[i]||''}" oninput="scoreInput(this,${i})" onfocus="this.select()">`;
+    h+=`<div class="tot" id="t${start}">${sumRange(s,start)||''}</div>`; return h;
+  };
+  const idx=order.indexOf(p.id);
+  return `<div class="scoreLayout"><div class="plist card">${list}</div>
+  <div><div class="card">
+    <h2 style="margin-top:0">${esc(p.name)} <span class="muted" style="font-size:1rem">Course handicap ${p.ch} · ${p.skins?'In skins':'Not in skins'}</span></h2>
+    <div class="card-grid">${half(0,'Out')}</div>
+    <div class="card-grid">${half(9,'In')}</div>
+    <p class="muted" style="margin:0">Gold boxes are par 3s. Type a score and it jumps to the next hole (for a 1 on a hole, press Tab).</p>
+    <div class="bigtotals"><div>Gross<b id="tg">${tot(p.id)||'—'}</b></div><div>Handicap<b>${p.ch}</b></div><div>Net<b id="tn">${filled(p.id)===18?tot(p.id)-p.ch:'—'}</b></div></div>
+  </div>
+  <div class="row">${idx>0?`<button class="btn big ghost" onclick="state.scoreId='${order[idx-1]}';render()">◀ Previous Golfer</button>`:''}
+  <div style="flex:1"></div>${idx<order.length-1?`<button class="btn big" onclick="state.scoreId='${order[idx+1]}';render()">Next Golfer ▶</button>`:`<button class="btn big" onclick="go('results')">See Results ▶</button>`}</div>
+  </div></div>`;
+}
+function sumRange(s,start){let t=0;for(let i=start;i<start+9;i++)t+=(+s[i]||0);return t;}
+function scoreInput(el,h){
+  const v=el.value.replace(/\D/g,'').slice(0,2); el.value=v;
+  const id=state.scoreId, w=db.week; if(!w.scores[id]) w.scores[id]=Array(18).fill(null);
+  w.scores[id][h]=v?+v:null; save();
+  const s=w.scores[id], tot=s.reduce((a,b)=>a+(+b||0),0), filled=s.filter(x=>x>0).length;
+  const ch=weekPlayers().find(p=>p.id===id).ch;
+  document.getElementById('t0').textContent=sumRange(s,0)||''; document.getElementById('t9').textContent=sumRange(s,9)||'';
+  document.getElementById('tg').textContent=tot||'—'; document.getElementById('tn').textContent=filled===18?tot-ch:'—';
+  const btn=document.querySelector('.plist button.on span:last-child');
+  if(btn){ btn.className=filled===18?'ok':'muted'; btn.textContent=filled===18?tot+' ✓':filled+'/18'; }
+  if(v && (v.length===2 || v!=='1') && h<17) document.getElementById('h'+(h+1)).focus();
+}
+function focusFirstEmpty(){ const ins=[...document.querySelectorAll('.card-grid input')]; const e=ins.find(i=>!i.value); if(e) e.focus(); }
+
+/* ======================= RESULTS ======================= */
+function rResults(){
+  if(state.viewWeek){ const wk=db.history.find(h=>h.id===state.viewWeek); if(wk) return `<div class="row noprint" style="margin-bottom:16px"><button class="btn ghost" onclick="state.viewWeek=null;state.tab='history';render()">◀ Back to History</button><div style="flex:1"></div><button class="btn" onclick="window.print()">Print</button></div>`+resultsHTML(wk.results); }
+  if(!getCourse(db.week.courseId)) return needCourse();
+  if(!weekPlayers().length) return `<div class="card empty">Nobody is checked in yet.</div>`;
+  const res=computeResults();
+  return `<div class="row noprint" style="margin-bottom:16px"><div style="flex:1"></div>
+    <button class="btn ghost big" onclick="window.print()">🖨 Print Results</button>
+    <button class="btn big" onclick="publishWeek()">📣 Publish to Golfers</button></div>`+resultsHTML(res);
+}
+function resultsHTML(res){
+  const modeTxt={gross:'Gross only',net:'Net only',both:'Gross & Net'}[res.mode];
+  const payouts=Object.entries(res.payouts).map(([id,p])=>p).filter(p=>p.total>0.004).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name));
+  let h=`<div class="print-only"><h1>Men's League Results</h1></div>
+  <div class="card"><h2 style="margin-top:0">${fmtDate(res.date)} · ${esc(res.courseName)}</h2>
+    <div class="stat"><span class="muted">Players</span><b>${res.playerCount}</b></div>
+    <div class="stat"><span class="muted">Round money</span><b>${money(res.collectedRound)}</b></div>
+    <div class="stat"><span class="muted">Skins money</span><b>${money(res.collectedSkins)}</b></div>
+    <div class="stat"><span class="muted">Par 3 carried in</span><b>${money(res.carryInTotal)}</b></div>
+    <div class="stat"><span class="muted">Paid out</span><b>${money(res.paid)}</b></div>
+    <div class="stat"><span class="muted">Par 3 rolls to next week</span><b>${money(res.rollover)}</b></div>
+    <p class="muted" style="margin-bottom:0">${modeTxt} · ${res.places} place${res.places>1?'s':''} paid per flight</p></div>`;
+  if(res.warnings.length) h+=`<div class="warn"><b>Please check:</b><ul style="margin:6px 0 0">${res.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`;
+  h+=`<h2>Payouts</h2><div class="card">${payouts.length?`<table><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
+    ${payouts.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="num">${p.round?money(p.round):''}</td><td class="num">${p.skins?money(p.skins):''}</td><td class="num">${p.par3?money(p.par3):''}</td><td class="num money">${money(p.total)}</td></tr>`).join('')}</table>`:'<p class="muted">No payouts yet — enter scores.</p>'}</div>`;
+  h+=`<h2>Par 3 Skins (whole field)</h2><div class="card"><table><tr><th>Hole</th><th class="num">This week</th><th class="num">Carried in</th><th class="num">Pot</th><th>Result</th></tr>
+    ${res.par3.map(p=>`<tr><td><b>#${p.hole}</b></td><td class="num">${money(p.base)}</td><td class="num">${money(p.carryIn)}</td><td class="num money">${money(p.pot)}</td>
+    <td>${p.winner?`<b>${esc(p.winnerName)}</b> with a ${p.low}`:p.low==null?'<span class="muted">No scores</span>':`Tied (${p.tied} with ${p.low}) — <b>${money(p.pot)} rolls over</b>`}</td></tr>`).join('')}</table></div>`;
+  res.flights.forEach(f=>{
+    const sortKey=res.mode==='gross'?'gross':'net';
+    const rows=[...f.rows].sort((a,b)=>(b.complete-a.complete)||a[sortKey]-b[sortKey]||a.gross-b.gross);
+    const aw=Object.fromEntries(f.awards.map(a=>[a.id,a]));
+    h+=`<h2>${f.name}</h2><div class="card">
+      <p class="muted" style="margin-top:0">${f.rows.length} players · Round purse ${money(f.purse)}${res.mode==='both'?` (${money(f.purse/2)} gross / ${money(f.purse/2)} net)`:''}</p>
+      <table><tr><th>Golfer</th><th class="num">Hcp</th><th class="num">Gross</th><th class="num">Net</th><th>Prize</th></tr>
+      ${rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td class="num">${r.ch}</td><td class="num">${r.complete?r.gross:'—'}</td><td class="num">${r.complete?r.net:'—'}</td>
+        <td>${aw[r.id]?`<span class="pill yes">${aw[r.id].place} ${aw[r.id].cat}</span> <span class="money">${money(aw[r.id].amount)}</span>`:''}</td></tr>`).join('')}</table>
+      <h3 style="margin-top:20px">Skins — ${f.skinsPlayers} in, pot ${money(f.skinsPot)}, ${f.skinsWon} won${f.skinsWon?` at ${money(f.skinValue)} each`:''}</h3>
+      <table><tr><th>Hole</th><th>Result</th></tr>${f.holes.map(x=>`<tr><td>#${x.hole}</td><td>${x.winner?`<b>${esc(x.winnerName)}</b> with a ${x.low} <span class="money">${money(f.skinValue)}</span>`:x.low==null?'<span class="muted">—</span>':`<span class="muted">Tied (${x.tied} with ${x.low}) — no skin</span>`}</td></tr>`).join('')}</table>
+    </div>`;
+  });
+  return h;
+}
+function golferUrl(){ return new URL('./',location.href).href; }
+function busy(msg){ document.getElementById('app').innerHTML=`<div class="card empty">${esc(msg)}</div>`; }
+// Saves the week to History, posts it for golfers, and alerts the golfers who played.
+async function publishWeek(){
+  const res=computeResults(); if(!res) return;
+  if(!db.settings.leaguePassword) return alert('Please set a League Password in Settings first, so golfers can open the app.');
+  if(res.warnings.some(w=>w.includes('18 scores')) && !confirm('Some golfers do not have all 18 scores. Publish anyway?')) return;
+  const later=db.history.filter(x=>x.courseId===res.courseId && x.date>res.date);
+  if(later.length && !confirm('There are already saved weeks AFTER this date. Par 3 carryovers on those weeks will not match. Publish anyway?')) return;
+  const same=db.history.find(x=>x.date===res.date);
+  if(same && !confirm(`The week of ${fmtDate(res.date)} was already published. Replace it with these results?`)) return;
+  const sendAlert = same ? confirm('Send the alert to golfers again?') : true;
+  if(!same && !confirm(`Publish results for ${fmtDate(res.date)}?\n\nGolfers who played will get an alert on their phone.`)) return;
+
+  const c=getCourse(res.courseId), week=JSON.parse(JSON.stringify(db.week)), players={}, scores={};
+  weekPlayers().forEach(p=>{ players[p.id]={name:p.name,ch:p.ch,skins:p.skins}; scores[p.id]=week.scores[p.id]||[]; });
+  res.flights.forEach(f=>f.rows.forEach(r=>{ if(players[r.id]) players[r.id].flight=f.name; }));
+  const pub={date:res.date,courseName:c.name,pars:c.pars,results:res,players,scores};
+
+  busy('Publishing…');
+  const r1=await sb.from('published_weeks').upsert({week_date:res.date,data:pub,published_at:new Date().toISOString()});
+  const r2=await sb.from('public_roster').upsert({id:1,data:db.golfers.map(g=>({id:g.id,name:g.name}))});
+  if(r1.error||r2.error){ console.error(r1.error||r2.error); alert('Could not publish. Please check the internet connection and try again.'); return render(); }
+
+  if(same) db.history=db.history.filter(x=>x!==same);
+  db.history.push({id:uid('w'),date:res.date,courseId:res.courseId,savedAt:Date.now(),results:res,week,published:true});
+  save(); await flush();
+
+  let msg='Results are published for golfers.';
+  if(sendAlert){
+    busy('Sending alerts…');
+    const {data,error}=await sb.functions.invoke('send-push',{body:{golferIds:Object.keys(players),title:"⛳ League results are posted",body:`Results for ${fmtDate(res.date)} are up. Tap to see how you did.`,url:golferUrl()}});
+    if(error) { console.error(error); msg+='\n\nThe phone alerts could not be sent this time.'; }
+    else msg+=`\n\nAlert sent to ${data.sent} phone${data.sent===1?'':'s'}.`+(Object.keys(players).length>data.sent?` (Golfers who haven't turned on alerts won't get one.)`:'');
+  }
+  render();
+  alert(msg);
+  if(confirm('Start a fresh week now? (This clears check-in and scores.)')){ db.week=newWeek(db.week.courseId); state.scoreId=null; save(); go('history'); }
+}
+function printQR(){
+  const box=document.getElementById('qrbox'); box.innerHTML='';
+  new QRCode(box,{text:golferUrl(),width:420,height:420,correctLevel:QRCode.CorrectLevel.M});
+  document.getElementById('qraddr').textContent=golferUrl().replace(/^https?:\/\//,'').replace(/\/$/,'');
+  document.body.classList.add('qr-printing');
+  setTimeout(()=>{ window.print(); document.body.classList.remove('qr-printing'); },300);
+}
+async function setLeaguePw(){
+  const v=document.getElementById('lpw').value.trim();
+  if(v.length<4) return alert('Please use at least 4 letters or numbers.');
+  if(db.settings.leaguePassword && !confirm('Change the league password? Every golfer will need to type the new one.')) return;
+  const {error}=await sb.rpc('set_league_password',{pw:v});
+  if(error){ console.error(error); return alert('Could not set the password. Please check the internet and try again.'); }
+  db.settings.leaguePassword=v; save(); render(); alert('League password set to: '+v);
+}
+async function signOut(){ if(dirty) await flush(); await sb.auth.signOut(); location.reload(); }
+
+/* ======================= ROSTER ======================= */
+function rRoster(){
+  const c=getCourse(db.week.courseId);
+  const list=[...db.golfers].sort((a,b)=>a.name.localeCompare(b.name));
+  return `<div class="card"><h3>Add a golfer</h3><div class="row">
+    <div style="flex:2;min-width:240px"><label>Name</label><input id="newName" style="width:100%" placeholder="First Last" onkeydown="if(event.key==='Enter')document.getElementById('newIdx').focus()"></div>
+    <div><label>Handicap index</label><input id="newIdx" style="width:160px" placeholder="e.g. 12.4" onkeydown="if(event.key==='Enter')addGolfer()"></div>
+    <button class="btn big" onclick="addGolfer()">+ Add Golfer</button></div>
+    <p class="muted" style="margin-bottom:0">For a plus handicap, type a + sign, e.g. <b>+2.1</b></p></div>
+  <details class="card"><summary style="font-size:1.1rem;font-weight:700;cursor:pointer">Add many golfers at once (paste a list)</summary>
+    <p class="muted">One golfer per line: name, then a comma, then the index. Example: <b>John Smith, 12.4</b></p>
+    <textarea id="bulk"></textarea><br><br><button class="btn" onclick="bulkAdd()">Add These Golfers</button></details>
+  <h2>Roster (${list.length} golfers)</h2>
+  <div class="card"><input style="width:100%;margin-bottom:10px" placeholder="🔍  Find a golfer…" oninput="filterRoster(this.value)">
+  <table id="rosterTable"><tr><th>Name</th><th>Handicap index</th>${c?`<th class="num">Course Hcp</th>`:''}<th></th></tr>
+  ${list.map(g=>`<tr data-name="${esc(g.name.toLowerCase())}"><td style="display:flex;gap:8px;align-items:center"><input value="${esc(g.name)}" style="flex:1" onchange="editGolfer('${g.id}','name',this.value)">${g.test?'<span class="pill no">TEST</span>':''}</td>
+    <td><input value="${showIndex(g.index)==='—'?'':showIndex(g.index)}" style="width:120px" onchange="editGolfer('${g.id}','index',this.value)"></td>
+    ${c?`<td class="num">${courseHcp(g.index,c)}</td>`:''}
+    <td><button class="btn small danger" onclick="delGolfer('${g.id}')">Delete</button></td></tr>`).join('')}</table></div>`;
+}
+function filterRoster(q){ q=q.toLowerCase(); document.querySelectorAll('#rosterTable tr[data-name]').forEach(tr=>tr.style.display=tr.dataset.name.includes(q)?'':'none'); }
+function addGolfer(){
+  const n=document.getElementById('newName').value.trim(), iv=document.getElementById('newIdx').value;
+  if(!n) return alert('Please type a name.');
+  const idx=parseIndex(iv); if(idx==null) return alert('Please type a handicap index, like 12.4');
+  if(db.golfers.some(g=>g.name.toLowerCase()===n.toLowerCase()) && !confirm(n+' is already on the roster. Add anyway?')) return;
+  db.golfers.push({id:uid('g'),name:n,index:idx,active:true}); save(); render(); document.getElementById('newName').focus();
+}
+function bulkAdd(){
+  const lines=document.getElementById('bulk').value.split('\n').map(l=>l.trim()).filter(Boolean); let added=0, bad=[];
+  for(const l of lines){ const m=l.match(/^(.*?)[,\t ]+([+]?-?\d+(\.\d+)?)\s*$/); if(!m){bad.push(l);continue;}
+    db.golfers.push({id:uid('g'),name:m[1].replace(/[,\t]+$/,'').trim(),index:parseIndex(m[2]),active:true}); added++; }
+  save(); render(); alert(`Added ${added} golfer(s).`+(bad.length?`\n\nCould not read these lines:\n${bad.join('\n')}`:''));
+}
+function editGolfer(id,k,v){ const g=golfer(id); if(k==='name'){ if(!v.trim()) return render(); g.name=v.trim(); } else { const n=parseIndex(v); if(n==null){alert('Please type a number like 12.4');return render();} g.index=n; } save(); render(); }
+function delGolfer(id){ const g=golfer(id); if(!confirm(`Delete ${g.name} from the roster?`)) return; db.golfers=db.golfers.filter(x=>x.id!==id); delete db.week.players[id]; save(); render(); }
+
+/* ======================= HISTORY ======================= */
+function rHistory(){
+  const hist=sortedHistory().reverse();
+  if(!hist.length) return `<div class="card empty">No weeks published yet. After entering scores, go to <b>Results</b> and press <b>Publish to Golfers</b>.</div>`;
+  const season={};
+  hist.forEach(wk=>{ for(const id in wk.results.payouts){ const p=wk.results.payouts[id]; const g=golfer(id);
+    if(!season[id]) season[id]={name:g?g.name:p.name,round:0,skins:0,par3:0,total:0,weeks:0};
+    const s=season[id]; s.round+=p.round; s.skins+=p.skins; s.par3+=p.par3; s.total+=p.total; } });
+  hist.forEach(wk=>Object.keys(wk.week.players||{}).forEach(id=>{ if(season[id]) season[id].weeks++; }));
+  const money_list=Object.values(season).filter(s=>s.total>0.004).sort((a,b)=>b.total-a.total);
+  return `<h2 style="margin-top:0">Saved weeks</h2><div class="card"><table><tr><th>Date</th><th>Course</th><th class="num">Players</th><th class="num">Paid out</th><th></th></tr>
+    ${hist.map(wk=>`<tr><td><b>${fmtDate(wk.date)}</b></td><td>${esc(wk.results.courseName)}</td><td class="num">${wk.results.playerCount}</td><td class="num">${money(wk.results.paid)}</td>
+    <td style="white-space:nowrap"><button class="btn small" onclick="state.tab='results';state.viewWeek='${wk.id}';render()">View</button>
+    <button class="btn small ghost" onclick="reopenWeek('${wk.id}')">Fix scores</button>
+    <button class="btn small danger" onclick="delWeek('${wk.id}')">Delete</button></td></tr>`).join('')}</table></div>
+  <h2>Season money list</h2><div class="card"><table><tr><th>#</th><th>Golfer</th><th class="num">Played</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
+    ${money_list.map((s,i)=>`<tr><td>${i+1}</td><td><b>${esc(s.name)}</b></td><td class="num">${s.weeks}</td><td class="num">${money(s.round)}</td><td class="num">${money(s.skins)}</td><td class="num">${money(s.par3)}</td><td class="num money">${money(s.total)}</td></tr>`).join('')}</table></div>`;
+}
+function reopenWeek(id){
+  const wk=db.history.find(h=>h.id===id);
+  const hasCurrent=Object.keys(db.week.players).length;
+  if(!confirm(`Load ${fmtDate(wk.date)} back in to fix scores?`+(hasCurrent?'\n\nThe week you are working on now (not published) will be replaced.':'')+'\n\nWhen done, press "Publish to Golfers" again to replace it.')) return;
+  db.week=JSON.parse(JSON.stringify(wk.week)); state.scoreId=null; save(); go('scores');
+}
+async function delWeek(id){
+  const wk=db.history.find(h=>h.id===id);
+  if(!confirm(`Permanently delete the week of ${fmtDate(wk.date)}? Golfers will no longer see it. This cannot be undone.`)) return;
+  const {error}=await sb.from('published_weeks').delete().eq('week_date',wk.date);
+  if(error){ console.error(error); return alert('Could not delete. Please check the internet and try again.'); }
+  db.history=db.history.filter(h=>h.id!==id); save(); render();
+}
+
+/* ======================= SETTINGS ======================= */
+function rSettings(){
+  const s=db.settings;
+  const ec=state.editCourse;
+  return `<h2 style="margin-top:0">Money</h2><div class="card"><div class="row">
+    <div><label>Round fee per player ($)</label><input type="number" min="0" step="1" value="${s.roundFee}" style="width:180px" onchange="setNum('roundFee',this.value)"></div>
+    <div><label>Skins fee per player ($)</label><input type="number" min="0" step="1" value="${s.skinsFee}" style="width:180px" onchange="setNum('skinsFee',this.value)"></div></div>
+    <p class="muted" style="margin-bottom:0">Round money is paid within each flight. Skins money is split by hole: par 3 holes go to the whole-field par 3 skins (rolls over week to week if tied), the other holes go to each flight's skins.</p></div>
+  <h2>Prizes</h2><div class="card">
+    <label>Pay prizes for</label><div class="seg">${[['gross','Gross only'],['net','Net only'],['both','Gross & Net']].map(([k,l])=>`<button class="${s.mode===k?'on':''}" onclick="db.settings.mode='${k}';save();render()">${l}</button>`).join('')}</div>
+    ${s.mode==='both'?'<p class="muted">Each flight\'s round money is split 50/50 between gross and net. A golfer can only win one prize — he gets the one that pays more.</p>':''}
+    <br><label>Number of places paid in each flight</label><div class="seg">${[1,2,3].map(n=>`<button class="${s.places===n?'on':''}" onclick="db.settings.places=${n};save();render()">${n} place${n>1?'s':''}</button>`).join('')}</div>
+    <br><label>Percentage for each place (must add up to 100)</label><div class="row">
+    ${s.pct[s.places].map((p,i)=>`<div><label>${ordinal(i+1)} place %</label><input type="number" min="0" max="100" value="${p}" style="width:130px" onchange="setPct(${i},this.value)"></div>`).join('')}
+    <div style="padding-bottom:14px">${(()=>{const t=s.pct[s.places].reduce((a,b)=>a+(+b||0),0);return t===100?'<span class="pill yes">Total 100% ✓</span>':`<span class="pill no" style="background:var(--red-light);color:var(--red)">Total ${t}% — should be 100%</span>`})()}</div></div></div>
+  <h2>Courses</h2>
+  ${ec?courseForm(ec):`<div class="card">${db.courses.length?`<table><tr><th>Course</th><th class="num">Par</th><th class="num">Slope</th><th class="num">Rating</th><th>Par 3 carryover now</th><th></th></tr>
+    ${db.courses.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td class="num">${coursePar(c)}</td><td class="num">${c.slope}</td><td class="num">${c.rating}</td>
+      <td>${c.pars.map((p,i)=>p===3?`#${i+1}: ${money(carryFor(c,i,'9999-12-31'))}`:'').filter(Boolean).join(' · ')}</td>
+      <td style="white-space:nowrap"><button class="btn small" onclick="editCourse('${c.id}')">Edit</button> <button class="btn small danger" onclick="delCourse('${c.id}')">Delete</button></td></tr>`).join('')}</table><br>`:'<p class="muted">No course yet.</p>'}
+    <button class="btn big" onclick="editCourse(null)">+ Add Course</button></div>`}
+  <h2>Golfer app</h2><div class="card">
+    <label>Web address for golfers</label><div style="font-size:1.4rem;font-weight:800;word-break:break-all;margin-bottom:14px">${esc(golferUrl())}</div>
+    <div class="row"><button class="btn big" onclick="printQR()">🖨 Print QR Code Sheet</button><button class="btn big ghost" onclick="window.open(golferUrl(),'_blank')">Open Golfer App</button></div>
+    <h3 style="margin-top:24px">League password</h3>
+    <p class="muted" style="margin-top:0">Golfers type this once on their phone to open the app. ${db.settings.leaguePassword?`It is now: <b style="color:var(--ink);font-size:1.2rem">${esc(db.settings.leaguePassword)}</b>`:'<b style="color:var(--red)">Not set yet.</b>'}</p>
+    <div class="row"><div><label>${db.settings.leaguePassword?'New':'Set'} league password</label><input id="lpw" style="width:260px" autocomplete="off" placeholder="e.g. birdie26"></div>
+    <button class="btn big" onclick="setLeaguePw()">Save League Password</button></div></div>
+  <h2>Test golfers</h2><div class="card"><p class="muted" style="margin-top:0">${db.golfers.filter(g=>g.test).length} test golfers are on the roster (marked <span class="pill no">TEST</span>). Remove them before the season starts.</p>
+    <div class="row"><button class="btn big danger" onclick="removeTestGolfers()">Remove Test Golfers</button><button class="btn big ghost" onclick="addTestGolfersBtn()">Add 100 Test Golfers</button></div></div>
+  <h2>Back up &amp; restore</h2><div class="card"><p class="muted" style="margin-top:0">Everything is saved online automatically. A backup file is extra safety: make one now and then and keep it on a USB stick or in your email.</p>
+    <div class="row"><button class="btn big" onclick="backup()">⬇ Back Up Data</button>
+    <label class="btn big ghost" style="display:inline-flex;align-items:center;margin:0;color:var(--green);font-size:1.3rem">⬆ Restore From Backup<input type="file" accept=".json,application/json" style="display:none" onchange="restore(this)"></label></div></div>
+  <h2>Account</h2><div class="card"><button class="btn big danger" onclick="signOut()">Sign Out</button></div>`;
+}
+function setNum(k,v){ const n=parseFloat(v); if(isNaN(n)||n<0) return alert('Please enter a number.'); db.settings[k]=n; save(); render(); }
+function setPct(i,v){ db.settings.pct[db.settings.places][i]=parseFloat(v)||0; save(); render(); }
+function editCourse(id){
+  const c=id?getCourse(id):null;
+  state.editCourse=c?JSON.parse(JSON.stringify(c)):{id:null,name:'',slope:113,rating:72,pars:Array(18).fill(4),startCarry:{}};
+  render();
+}
+function courseForm(c){
+  const parRow=start=>{let h='';for(let i=start;i<start+9;i++)h+=`<div>${i+1}</div>`;for(let i=start;i<start+9;i++)h+=`<input id="par${i}" inputmode="numeric" value="${c.pars[i]}" onchange="state.editCourse.pars[${i}]=+this.value;render()">`;return h;};
+  const p3=c.pars.map((p,i)=>p===3?i:-1).filter(i=>i>=0);
+  return `<div class="card"><h3>${c.id?'Edit course':'Add a course'}</h3><div class="row">
+    <div style="flex:2;min-width:240px"><label>Course name</label><input style="width:100%" value="${esc(c.name)}" oninput="state.editCourse.name=this.value"></div>
+    <div><label>Slope</label><input type="number" style="width:140px" value="${c.slope}" oninput="state.editCourse.slope=+this.value"></div>
+    <div><label>Rating</label><input type="number" step="0.1" style="width:140px" value="${c.rating}" oninput="state.editCourse.rating=+this.value"></div></div>
+    <br><label>Par for each hole (total ${coursePar(c)})</label><div class="pars">${parRow(0)}</div><br><div class="pars">${parRow(9)}</div>
+    ${p3.length?`<br><label>Par 3 money already carried over (only if your league has a rollover from before using this program)</label><div class="row">
+      ${p3.map(i=>`<div><label>Hole ${i+1} $</label><input type="number" min="0" style="width:130px" value="${(c.startCarry||{})[i]||0}" oninput="state.editCourse.startCarry[${i}]=+this.value"></div>`).join('')}</div>`:''}
+    <br><div class="row"><button class="btn big" onclick="saveCourse()">Save Course</button><button class="btn big ghost" onclick="state.editCourse=null;render()">Cancel</button></div></div>`;
+}
+function saveCourse(){
+  const c=state.editCourse;
+  if(!c.name.trim()) return alert('Please type the course name.');
+  if(c.pars.some(p=>!(p>=3&&p<=6))) return alert('Each hole par should be 3, 4, 5 or 6.');
+  if(!(c.slope>=55&&c.slope<=155)) return alert('Slope should be between 55 and 155.');
+  if(!(c.rating>50&&c.rating<90)) return alert('Please check the course rating (e.g. 71.2).');
+  c.name=c.name.trim();
+  if(c.id){ const i=db.courses.findIndex(x=>x.id===c.id); db.courses[i]=c; }
+  else { c.id=uid('c'); db.courses.push(c); }
+  if(!db.week.courseId) db.week.courseId=c.id;
+  state.editCourse=null; save(); render();
+}
+function delCourse(id){
+  if(db.history.some(h=>h.courseId===id)) return alert('This course has saved weeks in History, so it cannot be deleted.');
+  if(!confirm('Delete this course?')) return;
+  db.courses=db.courses.filter(c=>c.id!==id); if(db.week.courseId===id) db.week.courseId=(db.courses[0]||{}).id||null; save(); render();
+}
+function backup(){
+  const blob=new Blob([JSON.stringify(db,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`MensLeague-backup-${todayStr()}.json`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function restore(inp){
+  const f=inp.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(!d.golfers||!d.settings) throw 0;
+      if(!confirm(`Restore this backup? It has ${d.golfers.length} golfers and ${(d.history||[]).length} saved weeks.\n\nEverything currently in the program will be replaced.`)) return;
+      const pw=db.settings.leaguePassword; db=d; normalize(); db.settings.leaguePassword=pw; save(); render(); alert('Backup restored.'); }
+    catch(e){ alert('That file is not a Men\'s League backup.'); } };
+  r.readAsText(f);
+}
+
+/* ======================= TEST GOLFERS ======================= */
+const FIRST=['Mike','Dave','Steve','John','Bob','Tom','Jim','Bill','Rick','Paul','Mark','Gary','Larry','Dan','Ken','Ron','Joe','Frank','Pete','Greg'];
+const LAST=['Anderson','Baker','Carter','Dupont','Evans','Fisher','Gagnon','Harris','Irving','Jensen','Kelly','Leblanc','Murphy','Nolan','Olsen','Parker','Quinn','Roy','Sullivan','Tremblay','Walsh','Young'];
+function addTestGolfers(){
+  let seed=42; const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+  const used=new Set(db.golfers.map(g=>g.name.toLowerCase())); let added=0, i=0;
+  while(added<100 && i<FIRST.length*LAST.length){
+    const name=FIRST[i%FIRST.length]+' '+LAST[(i*7+Math.floor(i/FIRST.length))%LAST.length]; i++;
+    if(used.has(name.toLowerCase())) continue; used.add(name.toLowerCase());
+    const idx=Math.round((Math.pow(rnd(),0.9)*40 - 4)*10)/10;   // spread from about +4 to 36
+    db.golfers.push({id:uid('g'),name,index:idx,active:true,test:true}); added++;
+  }
+  return added;
+}
+function addTestGolfersBtn(){ if(db.golfers.some(g=>g.test) && !confirm('Test golfers are already on the roster. Add another 100?')) return; const n=addTestGolfers(); save(); render(); alert(`Added ${n} test golfers.`); }
+function removeTestGolfers(){
+  const n=db.golfers.filter(g=>g.test).length; if(!n) return alert('There are no test golfers on the roster.');
+  if(!confirm(`Remove all ${n} test golfers from the roster? Your real golfers stay.`)) return;
+  db.golfers.forEach(g=>{ if(g.test){ delete db.week.players[g.id]; delete db.week.scores[g.id]; } });
+  db.golfers=db.golfers.filter(g=>!g.test); db.week.flightsKey=''; save(); render();
+}
+
+/* ======================= SIGN IN & START ======================= */
+const app=()=>document.getElementById('app');
+function showLogin(msg){
+  document.getElementById('nav').style.display='none';
+  app().innerHTML=`<div class="card" style="max-width:520px;margin:40px auto"><h2 style="margin-top:0">Admin sign in</h2>
+    ${msg?`<div class="warn">${esc(msg)}</div>`:''}
+    <label>Email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
+    <label>Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()"><br><br>
+    <button class="btn big" style="width:100%" onclick="doLogin()">Sign In</button></div>`;
+  document.getElementById('em').focus();
+}
+async function doLogin(){
+  const email=document.getElementById('em').value.trim(), password=document.getElementById('pw').value;
+  busy('Signing in…');
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  if(error) return showLogin('That email or password is not right. Please try again.');
+  afterLogin();
+}
+async function afterLogin(){
+  const {data:ok,error}=await sb.rpc('claim_admin');
+  if(error||!ok){ await sb.auth.signOut(); return showLogin('This account is not the league admin.'); }
+  let fresh;
+  try{ fresh=await loadRemote(); }catch(e){ console.error(e); app().innerHTML=`<div class="card empty">Could not load the league data. Please check the internet connection.<br><br><button class="btn big" onclick="location.reload()">Try Again</button></div>`; return; }
+  if(fresh){ addTestGolfers(); db.testSeeded=true; }
+  if(!db.week.courseId && db.courses.length) db.week.courseId=db.courses[0].id;
+  if(fresh) await flush(); else setStatus('✓ Saved','ok');
+  document.getElementById('nav').style.display='';
+  render();
+}
+(async function boot(){
+  const cfg=window.LEAGUE_CONFIG||{};
+  if(!window.supabase || !cfg.supabaseUrl || !cfg.supabaseAnonKey){
+    app().innerHTML='<div class="card empty">This app is not connected to its online database yet (config.js), or there is no internet connection.</div>'; return;
+  }
+  sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
+  const {data:{session}}=await sb.auth.getSession();
+  if(session) afterLogin(); else showLogin();
+})();
+</script>
+</body>
+</html>
