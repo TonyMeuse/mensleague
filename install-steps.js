@@ -18,6 +18,12 @@
         <span>‹</span><span style="opacity:.35">›</span><span style="${ring};padding:4px 6px;display:flex">${shareIcon(40)}</span><span style="opacity:.35">▢</span><span style="opacity:.35">⧉</span></div>`),
     newerSafari: () => `<div style="display:flex;align-items:center;justify-content:center;gap:10px;font-size:1.05rem;margin-top:10px">
         <span style="${ring};display:flex;padding:3px">${dotsIcon(34)}</span><span>then</span><span style="display:flex;align-items:center;gap:4px;font-weight:700">${shareIcon(28)} Share</span></div>`,
+    newBar: () => box(`<div style="background:#fff;border-radius:24px;padding:8px 12px;display:flex;gap:10px;align-items:center;width:100%;max-width:320px;font-size:28px;color:${BLUE}">
+        <span>‹</span><span style="flex:1;background:#eef1ef;border-radius:16px;padding:8px 10px;color:#666;font-size:.95rem;text-align:center">tonymeuse.github.io</span><span style="${ring};display:flex;padding:3px">${dotsIcon(38)}</span></div>`),
+    shareRow: () => box(`<div style="background:#fff;border-radius:14px;width:100%;max-width:300px;overflow:hidden;font-size:1.05rem">
+        <div style="padding:12px 14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;${ring}">Share ${shareIcon(28)}</div>
+        <div style="padding:12px 14px;border-top:1px solid #e5e5e5;color:#999">Add to Bookmarks</div>
+        <div style="padding:12px 14px;border-top:1px solid #e5e5e5;color:#999">New Tab</div></div>`),
     chromeBar: () => box(`<div style="background:#fff;border-radius:14px;padding:10px 14px;display:flex;gap:12px;align-items:center;width:100%;max-width:300px">
         <span style="flex:1;background:#eef1ef;border-radius:10px;padding:8px 10px;color:#666;font-size:.95rem">tonymeuse.github.io</span><span style="${ring};padding:3px;display:flex">${shareIcon(32)}</span></div>`),
     addRow: () => box(`<div style="background:#fff;border-radius:14px;width:100%;max-width:300px;overflow:hidden;font-size:1.05rem">
@@ -47,11 +53,20 @@
       { title: 'Tap “Install”', text: 'Tap <b>Install</b> (or <b>Add</b>) to confirm.', pic: pics.androidOk() },
       { title: 'Open it from your Home Screen', text: 'Go to your Home Screen and tap the <b>League</b> icon.', pic: pics.homeScreen() }];
     const chrome = kind === 'ios-chrome';
+    const rest = [
+      { title: 'Tap “Add to Home Screen”', text: 'A list slides up. <b>Scroll down</b> a little and tap <b>Add to Home Screen</b>.<br><span style="color:#5b665e;font-size:.9em">(Don\'t see it? Tap <b>View More</b> first.)</span>', pic: pics.addRow() },
+      { title: 'Tap “Add”', text: 'At the <b>top right</b>, tap <b>Add</b>.', pic: pics.addButton() },
+      { title: 'Open it from your Home Screen', text: 'Close ' + (chrome ? 'Chrome' : 'Safari') + '. On your Home Screen, tap the new <b>League</b> icon.', pic: pics.homeScreen() }];
+    if (kind === 'ios-new' || kind === 'print') return [
+      { title: 'Tap the three dots', text: 'At the <b>bottom right</b> of the screen, tap the <b>three dots</b>.', pic: pics.newBar(),
+        extra: kind === 'print' ? `<p style="margin:10px 0 0;color:#5b665e">Older iPhone? Tap the Share button ${shareIcon(20)} at the bottom instead and skip to step 3.</p>` : '' },
+      { title: 'Tap “Share”', text: 'In the menu that opens, tap <b>Share</b>.', pic: pics.shareRow() },
+      ...rest];
     return [
       chrome
         ? { title: 'Tap the Share button', text: 'At the <b>top</b> of the screen, next to the web address, tap this button.', pic: pics.chromeBar() }
         : { title: 'Tap the Share button', text: 'At the <b>bottom</b> of the screen, tap this button.', pic: pics.safariBar(), extra: `<p style="text-align:center;margin:14px 0 0;color:#5b665e">Don't see it? Tap the <b>three dots</b> instead, then <b>Share</b>:</p>` + pics.newerSafari() },
-      { title: 'Tap “Add to Home Screen”', text: 'A list slides up. <b>Scroll down</b> a little and tap <b>Add to Home Screen</b>.', pic: pics.addRow() },
+      { title: 'Tap “Add to Home Screen”', text: 'A list slides up. <b>Scroll down</b> a little and tap <b>Add to Home Screen</b>.<br><span style="color:#5b665e;font-size:.9em">(Don\'t see it? Tap <b>View More</b> first.)</span>', pic: pics.addRow() },
       { title: 'Tap “Add”', text: 'At the <b>top right</b>, tap <b>Add</b>.', pic: pics.addButton() },
       { title: 'Open it from your Home Screen', text: 'Close ' + (chrome ? 'Chrome' : 'Safari') + '. On your Home Screen, tap the new <b>League</b> icon.', pic: pics.homeScreen() }];
   }
@@ -59,7 +74,9 @@
     const ua = navigator.userAgent;
     if (/Android/i.test(ua)) return 'android';
     if (/CriOS|FxiOS|EdgiOS/.test(ua)) return 'ios-chrome';
-    return 'ios-safari';
+    // iPhone software 26 and newer moved Share into the ⋯ menu. Safari reports its version as "Version/26".
+    const v = +((ua.match(/Version\/(\d+)/) || [])[1] || 0);
+    return v >= 26 ? 'ios-new' : 'ios-safari';
   }
   window.INSTALL = { steps, phoneKind, pics, shareIcon, appIcon };
 })();

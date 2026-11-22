@@ -517,7 +517,7 @@ async function publishWeek(){
 function printQR(){
   const box=document.getElementById('qrbox'); box.innerHTML='';
   new QRCode(box,{text:golferUrl(),width:260,height:260,correctLevel:QRCode.CorrectLevel.M});
-  document.getElementById('qrsteps').innerHTML=INSTALL.steps('ios-safari').map((st,i)=>`<div class="st"><h3>${i+1}. ${st.title}</h3><p style="margin:0 0 8px">${st.text}</p>${st.pic}${st.extra||''}</div>`).join('');
+  document.getElementById('qrsteps').innerHTML=INSTALL.steps('print').map((st,i)=>`<div class="st"><h3>${i+1}. ${st.title}</h3><p style="margin:0 0 8px">${st.text}</p>${st.pic}${st.extra||''}</div>`).join('');
   document.getElementById('qraddr').textContent=golferUrl().replace(/^https?:\/\//,'');
   document.querySelector('#qrsheet h1').textContent='⛳ '+league.name;
   document.body.classList.add('qr-printing');
