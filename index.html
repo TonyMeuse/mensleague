@@ -20,7 +20,7 @@
   html{font-size:18px}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;line-height:1.35}
   header{background:var(--green);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
-  header h1{margin:0;font-size:1.25rem;flex:1}
+  header h1{margin:0;font-size:1.25rem;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   header button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:10px;padding:8px 12px;font-size:.95rem;font-weight:600}
   main{padding:16px 16px calc(100px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
   .tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:5}
@@ -94,10 +94,10 @@ var installed=()=>matchMedia('(display-mode: standalone)').matches||navigator.st
 var installEvt=null;   // Android/Chrome: lets us show a real "Install App" button
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); installEvt=e; if($('installBox')) drawInstallBox(); });
 window.addEventListener('appinstalled',()=>{ installEvt=null; if($('installBox')) $('installBox').innerHTML=`<div class="card center"><h2 style="margin-top:0">✅ Installed!</h2><p>Close this page and open <b>League</b> from your Home Screen.</p></div>`; });
-function wantInstallScreen(){
-  let skipped=false; try{ skipped=sessionStorage.getItem('ml.skipInstall')==='1'; }catch(e){}
-  return (onIOS||onAndroid) && !installed() && !skipped;
-}
+var skippedInstall=false;   // only for this visit: the steps show again next time until installed
+var canInstall=()=>(onIOS||onAndroid) && !installed();
+var getAppBtn=()=>canInstall()?`<button onclick="showInstall()" style="background:#fff;color:var(--green)">📲 Get App</button>`:'';
+function wantInstallScreen(){ return canInstall() && !skippedInstall; }
 async function showInstall(){
   $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
   let name='your league';
@@ -106,7 +106,8 @@ async function showInstall(){
   $('app').innerHTML=`<div class="center" style="margin-top:10px"><img src="icon-192.png" alt="" style="width:96px;height:96px;border-radius:22px;box-shadow:0 4px 14px rgba(0,0,0,.2)">
     <h2 style="margin-bottom:4px">Get the ${esc(name)} app</h2><p class="muted" style="margin-top:0">Results, the money list and your stats, one tap away on your phone.</p></div>
     <div id="installBox"></div>
-    <button class="btn ghost" style="margin-top:8px" onclick="skipInstall()">Not now – just look in the browser</button>`;
+    <button class="btn ghost" style="margin-top:8px" onclick="skipInstall()">Not now – just look in the browser</button>
+    <p class="muted center">You can always come back to these steps with the <b>📲 Get App</b> button at the top.</p>`;
   drawInstallBox();
 }
 function drawInstallBox(){
@@ -133,7 +134,7 @@ function drawInstallBox(){
   $('installBox').innerHTML=h;
 }
 async function doInstall(){ if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt=null; drawInstallBox(); }
-function skipInstall(){ try{ sessionStorage.setItem('ml.skipInstall','1'); }catch(e){} startLeague(); }
+function skipInstall(){ skippedInstall=true; startLeague(); }
 function startLeague(){ if(wantInstallScreen()) return showInstall(); if(pw) refresh(); else showPassword(); }
 
 /* ---------- start ---------- */
@@ -169,7 +170,7 @@ async function refresh(){
 }
 
 async function showPassword(msg){
-  $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
+  $('tabs').style.display='none'; $('hdrBtn').innerHTML=getAppBtn();
   const {data:info}=await sb.rpc('league_info',{s:slug});
   if(!info) return showLeagues('That league link was not found. Please pick your league.');
   $('title').textContent='⛳ '+info.name;
@@ -190,7 +191,7 @@ async function tryPw(){
 }
 
 function showPickName(){
-  $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
+  $('tabs').style.display='none'; $('hdrBtn').innerHTML=getAppBtn();
   $('app').innerHTML=`<h2>Who are you?</h2><p class="muted" style="margin-top:0">Pick your name once. This phone will remember it.</p>
     <input placeholder="🔍 Type your name…" oninput="drawNames(this.value)" autocomplete="off"><br><br>
     <div class="namelist" id="names"></div>
@@ -213,7 +214,7 @@ async function pickName(id){
 
 /* ---------- main screens ---------- */
 function draw(){
-  $('hdrBtn').innerHTML=`<button onclick="showPickName()">${me&&me!=='none'?esc(myName().split(' ')[0])+' ▾':'Pick name'}</button>`;
+  $('hdrBtn').innerHTML=(canInstall()?`<button onclick="showInstall()" style="background:#fff;color:var(--green);margin-right:6px">📲 Get App</button>`:'')+`<button onclick="showPickName()">${me&&me!=='none'?esc(myName().split(' ')[0])+' ▾':'Pick name'}</button>`;
   const T=[['results','🏆','Results'],['money','💰','Money List'],['me','📊','My Stats']];
   $('tabs').style.display='flex';
   $('tabs').innerHTML=T.map(([k,i,l])=>`<button class="${tab===k?'on':''}" onclick="tab='${k}';draw();scrollTo(0,0)"><span>${i}</span>${l}</button>`).join('');
