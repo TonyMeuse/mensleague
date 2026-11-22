@@ -60,6 +60,7 @@
   .namelist button{display:block;width:100%;text-align:left;font-size:1.15rem;padding:15px;margin-bottom:8px;border:2px solid var(--line);border-radius:14px;background:#fff;font-family:inherit;color:var(--ink)}
   .bar{height:10px;border-radius:5px;background:var(--green-light);overflow:hidden}
   .bar i{display:block;height:100%;background:var(--green)}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(10px)}}
   .err{background:#fbe9e7;color:var(--red);border-radius:12px;padding:12px;margin-bottom:12px;font-weight:600}
 </style>
 </head>
@@ -85,6 +86,56 @@ const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
 const one=x=>x==null?'—':(Math.round(x*10)/10).toFixed(1);
 const myName=()=>{const r=(data&&data.roster||[]).find(g=>g.id===me);return r?r.name:'';};
 
+/* ---------- "Get the app" screen (add to Home Screen) ---------- */
+var UA=navigator.userAgent;
+var onIOS=/iPad|iPhone|iPod/.test(UA)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+var onAndroid=/Android/i.test(UA);
+var installed=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+var installEvt=null;   // Android/Chrome: lets us show a real "Install App" button
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); installEvt=e; if($('installBox')) drawInstallBox(); });
+window.addEventListener('appinstalled',()=>{ installEvt=null; if($('installBox')) $('installBox').innerHTML=`<div class="card center"><h2 style="margin-top:0">✅ Installed!</h2><p>Close this page and open <b>League</b> from your Home Screen.</p></div>`; });
+function wantInstallScreen(){
+  let skipped=false; try{ skipped=sessionStorage.getItem('ml.skipInstall')==='1'; }catch(e){}
+  return (onIOS||onAndroid) && !installed() && !skipped;
+}
+async function showInstall(){
+  $('tabs').style.display='none'; $('hdrBtn').innerHTML='';
+  let name='your league';
+  if(slug){ const {data:info}=await sb.rpc('league_info',{s:slug}); if(info){ name=info.name; $('title').textContent='⛳ '+info.name;
+    document.querySelector('meta[name="apple-mobile-web-app-title"]').content=info.name.length>14?'League':info.name; } }
+  $('app').innerHTML=`<div class="center" style="margin-top:10px"><img src="icon-192.png" alt="" style="width:96px;height:96px;border-radius:22px;box-shadow:0 4px 14px rgba(0,0,0,.2)">
+    <h2 style="margin-bottom:4px">Get the ${esc(name)} app</h2><p class="muted" style="margin-top:0">Results, the money list and your stats, one tap away on your phone.</p></div>
+    <div id="installBox"></div>
+    <button class="btn ghost" style="margin-top:8px" onclick="skipInstall()">Not now – just look in the browser</button>`;
+  drawInstallBox();
+}
+function drawInstallBox(){
+  const step=(n,html)=>`<div style="display:flex;gap:12px;align-items:flex-start;margin:12px 0"><b style="flex:none;width:32px;height:32px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center">${n}</b><div style="padding-top:4px">${html}</div></div>`;
+  let h;
+  if(installEvt){
+    h=`<div class="card"><button class="btn" style="font-size:1.3rem;padding:20px" onclick="doInstall()">📲 Install App</button>
+      <p class="muted center" style="margin-bottom:0">Then open <b>League</b> from your Home Screen.</p></div>`;
+  } else if(onIOS){
+    const otherBrowser=/CriOS|FxiOS|EdgiOS/.test(UA);
+    h=`<div class="card"><h3>Add it to your Home Screen:</h3>
+      ${step(1,otherBrowser?'Tap the <b>Share</b> button <span style="font-size:1.3em">⬆︎</span> in the address bar at the top':'Tap the <b>Share</b> button <span style="font-size:1.3em">⬆︎</span> at the bottom of the screen<br><span class="muted">(On newer iPhones, tap <b>⋯</b> first, then <b>Share</b>)</span>')}
+      ${step(2,'Scroll down and tap <b>Add to Home Screen</b> <span style="font-size:1.2em">⊞</span>')}
+      ${step(3,'Tap <b>Add</b> at the top right')}
+      ${step(4,'Close Safari and open <b>League</b> ⛳ from your Home Screen')}</div>
+      ${otherBrowser?'':`<div class="center" style="font-size:2.4rem;color:var(--green);animation:bob 1s ease-in-out infinite">⬇︎</div><p class="center muted" style="margin-top:0">The Share button is down here</p>`}`;
+  } else {
+    h=`<div class="card"><h3>Add it to your Home Screen:</h3>
+      ${step(1,'Tap the <b>⋮</b> menu at the top right of Chrome')}
+      ${step(2,'Tap <b>Install app</b> or <b>Add to Home screen</b>')}
+      ${step(3,'Tap <b>Install</b> / <b>Add</b>')}
+      ${step(4,'Open <b>League</b> ⛳ from your Home Screen')}</div>`;
+  }
+  $('installBox').innerHTML=h;
+}
+async function doInstall(){ if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt=null; drawInstallBox(); }
+function skipInstall(){ try{ sessionStorage.setItem('ml.skipInstall','1'); }catch(e){} startLeague(); }
+function startLeague(){ if(wantInstallScreen()) return showInstall(); if(pw) refresh(); else showPassword(); }
+
 /* ---------- start ---------- */
 (function boot(){
   if(!window.supabase||!cfg.supabaseUrl){ $('app').innerHTML='<div class="card center">Can\'t connect right now. Please check your internet and try again.</div>'; return; }
@@ -94,7 +145,7 @@ const myName=()=>{const r=(data&&data.roster||[]).find(g=>g.id===me);return r?r.
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&data) refresh(); });
   if(!slug) return showLeagues();
   useLeague(slug);
-  if(pw) refresh(); else showPassword();
+  startLeague();
 })();
 
 async function showLeagues(msg){
@@ -103,7 +154,7 @@ async function showLeagues(msg){
   if(error){ $('app').innerHTML='<div class="card center">Can\'t connect. Please check your internet.<br><br><button class="btn" onclick="showLeagues()">Try Again</button></div>'; return; }
   $('app').innerHTML=`<h2>Which league?</h2>${msg?`<div class="err">${esc(msg)}</div>`:''}<div class="namelist">${ls.map(l=>`<button onclick="pickLeague('${esc(l.slug)}')">⛳ ${esc(l.name)}</button>`).join('')||'<p class="muted">No leagues yet.</p>'}</div>`;
 }
-function pickLeague(s){ data=null; useLeague(s); if(pw) refresh(); else showPassword(); }
+function pickLeague(s){ data=null; useLeague(s); startLeague(); }
 
 async function refresh(){
   const {data:d,error}=await sb.rpc('get_league_data',{s:slug,pw});
