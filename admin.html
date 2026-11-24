@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261122124008';</script>
+<script>window.APP_VERSION='20261124145326';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -81,6 +81,9 @@
   .card-grid .h{text-align:center;font-weight:700;color:var(--muted);font-size:.9rem}
   .card-grid .par{text-align:center;font-size:.95rem;color:var(--muted)}
   .card-grid .lbl{font-weight:700}
+  .pwwrap{position:relative;display:block}
+  .pwwrap .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:52px;height:44px;border:0;background:none;font-size:1.5rem;cursor:pointer;opacity:.55;padding:0}
+  .pwwrap .eye.on{opacity:1}
   .card-grid input{width:100%;text-align:center;font-size:1.6rem;font-weight:700;padding:8px 0;min-height:64px}
   .card-grid input.p3{border-color:var(--gold)}
   .card-grid .tot{text-align:center;font-size:1.5rem;font-weight:800}
@@ -816,11 +819,12 @@ function showLogin(msg){
   app().innerHTML=box(`<h2 style="margin-top:0">Sign in</h2>
     ${msg?`<div class="warn">${esc(msg)}</div>`:''}
     <label>Email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
-    <label>Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()"><br><br>
+    <label>Password</label><span class="pwwrap"><input id="pw" type="password" autocomplete="current-password" style="width:100%;padding-right:64px" onkeydown="if(event.key==='Enter')doLogin()"><button type="button" class="eye" title="Show password" aria-label="Show password" onclick="togglePw(this)">👁</button></span><br><br>
     <button class="btn big" style="width:100%" onclick="doLogin()">Sign In</button><br><br>
     <button class="btn ghost" onclick="showStart()">◀ Back</button>`);
   document.getElementById('em').focus();
 }
+function togglePw(b){ const i=b.previousElementSibling, show=i.type==='password'; i.type=show?'text':'password'; b.classList.toggle('on',show); b.title=b.ariaLabel=show?'Hide password':'Show password'; i.focus(); }
 function showCreate(msg){
   signedOutLook();
   app().innerHTML=box(`<h2 style="margin-top:0">Create a new league</h2>
@@ -828,8 +832,8 @@ function showCreate(msg){
     ${msg?`<div class="warn">${esc(msg)}</div>`:''}
     <label>League name</label><input id="ln" style="width:100%" placeholder="e.g. Men's League, Seniors"><br><br>
     <label>Admin email</label><input id="em" type="email" autocomplete="username" style="width:100%"><br><br>
-    <label>Choose a password (at least 8 characters)</label><input id="pw" type="password" autocomplete="new-password" style="width:100%"><br><br>
-    <label>Type the password again</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%" onkeydown="if(event.key==='Enter')doCreate()"><br><br>
+    <label>Choose a password (at least 8 characters)</label><span class="pwwrap"><input id="pw" type="password" autocomplete="new-password" style="width:100%;padding-right:64px"><button type="button" class="eye" title="Show password" aria-label="Show password" onclick="togglePw(this)">👁</button></span><br><br>
+    <label>Type the password again</label><span class="pwwrap"><input id="pw2" type="password" autocomplete="new-password" style="width:100%;padding-right:64px" onkeydown="if(event.key==='Enter')doCreate()"><button type="button" class="eye" title="Show password" aria-label="Show password" onclick="togglePw(this)">👁</button></span><br><br>
     <button class="btn big" style="width:100%" onclick="doCreate()">Create League</button><br><br>
     <button class="btn ghost" onclick="showStart()">◀ Back</button>`);
   document.getElementById('ln').focus();
