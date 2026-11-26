@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script>window.APP_VERSION='20261124145326';</script>
+<script>window.APP_VERSION='20261126075825';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -190,7 +190,7 @@ async function showPassword(msg){
   if(!info) return showLeagues('That league link was not found. Please pick your league.');
   $('title').textContent='⛳ '+info.name;
   $('app').innerHTML=`<div class="card" style="margin-top:30px"><h2 style="margin-top:0">Welcome to ${esc(info.name)}!</h2>
-    <p class="muted">Type the league password to see results, the money list and your stats.</p>
+    <p class="muted">Type the league password to see results and your stats.</p>
     ${msg?`<div class="err">${esc(msg)}</div>`:''}
     <input id="pwin" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="League password" onkeydown="if(event.key==='Enter')tryPw()"><br><br>
     <button class="btn" onclick="tryPw()">Open</button></div>
@@ -261,10 +261,10 @@ function draw(){
     +(me&&me!=='none'?`<button id="bell" onclick="showAlertsScreen()" style="margin-right:6px">🔔</button>`:'')
     +`<button onclick="showPickName()">${me&&me!=='none'?esc(myName().split(' ')[0])+' ▾':'Pick name'}</button>`;
   updateBell();
-  const T=[['results','🏆','Results'],['money','💰','Money List'],['me','📊','My Stats']];
+  const T=[['results','🏆','Results'],['me','📊','My Stats']];
   $('tabs').style.display='flex';
   $('tabs').innerHTML=T.map(([k,i,l])=>`<button class="${tab===k?'on':''}" onclick="tab='${k}';draw();scrollTo(0,0)"><span>${i}</span>${l}</button>`).join('');
-  $('app').innerHTML={results:rResults,money:rMoney,me:rMe}[tab]();
+  $('app').innerHTML={results:rResults,me:rMe}[tab]();
   if(tab==='results' && me!=='none') alertBanner();
 }
 
@@ -301,22 +301,6 @@ function rResults(){
   return h;
 }
 
-function seasonTotals(){
-  const s={};
-  data.weeks.forEach(w=>{
-    for(const id in w.players){ if(!s[id]) s[id]={id,name:w.players[id].name,round:0,skins:0,par3:0,total:0,played:0}; s[id].played++; }
-    for(const id in w.results.payouts){ const p=w.results.payouts[id]; if(!s[id]) continue; s[id].round+=p.round; s[id].skins+=p.skins; s[id].par3+=p.par3; s[id].total+=p.total; }
-  });
-  return Object.values(s);
-}
-function rMoney(){
-  if(!data.weeks.length) return '<div class="card center muted">No results posted yet.</div>';
-  const list=seasonTotals().filter(x=>x.total>0.004).sort((a,b)=>b.total-a.total);
-  return `<h2>Season money list</h2><p class="muted" style="margin-top:0">${data.weeks.length} week${data.weeks.length>1?'s':''} played</p>
-    <div class="card"><table><tr><th>#</th><th>Golfer</th><th class="num">Played</th><th class="num">Won</th></tr>
-    ${list.map((x,i)=>`<tr class="${x.id===me?'me':''}"><td>${i+1}</td><td>${esc(x.name)}</td><td class="num">${x.played}</td><td class="num money">${money(x.total)}</td></tr>`).join('')}</table></div>`;
-}
-
 function myStats(){
   const rounds=[], dist={eagle:0,birdie:0,par:0,bogey:0,double:0,worse:0}, byPar={3:[],4:[],5:[]};
   data.weeks.forEach(w=>{
@@ -335,13 +319,10 @@ function myStats(){
 function rMe(){
   if(!me||me==='none') return `<div class="card center"><p>Pick your name to see your own stats.</p><button class="btn" onclick="showPickName()">Pick My Name</button></div>`;
   const {rounds,dist,byPar}=myStats(), done=rounds.filter(r=>r.gross!=null);
-  const tot=k=>rounds.reduce((a,r)=>a+(r.pay[k]||0),0);
   const holes=Object.values(dist).reduce((a,b)=>a+b,0)||1;
   const bestG=done.length?Math.min(...done.map(r=>r.gross)):null, bestN=done.length?Math.min(...done.map(r=>r.net)):null;
   const D=[['eagle','Eagle or better'],['birdie','Birdies'],['par','Pars'],['bogey','Bogeys'],['double','Double bogeys'],['worse','Triple or worse']];
   return `<h2>${esc(myName())}</h2>
-  <div class="card hero"><div class="muted">Won this season</div><div class="big">${money(tot('total'))}</div>
-    <div class="grid3" style="margin-top:10px"><div><div class="muted">Round</div><b>${money(tot('round'))}</b></div><div><div class="muted">Skins</div><b>${money(tot('skins'))}</b></div><div><div class="muted">Par 3s</div><b>${money(tot('par3'))}</b></div></div></div>
   <div class="grid2">
     <div class="tile"><div class="muted">Rounds played</div><b>${rounds.length}</b></div>
     <div class="tile"><div class="muted">Avg gross</div><b>${one(avg(done.map(r=>r.gross)))}</b></div>
