@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script>window.APP_VERSION='20261126081722';</script>
+<script>window.APP_VERSION='20261126095948';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -95,6 +95,8 @@ const money=x=>'$'+(Math.round((x||0)*100)/100).toFixed(2);
 const moneyS=x=>{const v=Math.round((x||0)*100)/100; return '$'+(Number.isInteger(v)?v:v.toFixed(2));};   // $36 instead of $36.00
 const fmtDate=(s,long)=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString(undefined,long?{weekday:'long',month:'long',day:'numeric'}:{month:'short',day:'numeric'});};
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const num1=n=>n==null||n===''?'—':Number.isInteger(+n)?String(+n):(+n).toFixed(1);
+const hcp=n=>n==null?'—':n<0?'+'+num1(-n):num1(n);
 const one=x=>x==null?'—':(Math.round(x*10)/10).toFixed(1);
 const myName=()=>{const r=(data&&data.roster||[]).find(g=>g.id===me);return r?r.name:'';};
 
@@ -278,7 +280,7 @@ function rResults(){
     const fl=r.flights.find(f=>f.rows.some(x=>x.id===me)), row=fl&&fl.rows.find(x=>x.id===me), aw=fl&&fl.awards.find(a=>a.id===me), pay=r.payouts[me];
     h+=`<div class="card hero"><div class="muted">Your night · ${esc(P[me].flight||'')}</div>
       <div class="grid3" style="margin-top:8px"><div><div class="muted">Gross</div><div class="big">${row&&row.complete?row.gross:'—'}</div></div>
-      <div><div class="muted">Net</div><div class="big">${row&&row.complete?row.net:'—'}</div></div>
+      <div><div class="muted">Net</div><div class="big">${row&&row.complete?num1(row.net):'—'}</div></div>
       <div><div class="muted">Won</div><div class="big">${pay&&pay.total>0.004?money(pay.total):'$0'}</div></div></div>
       ${aw?`<p style="margin:10px 0 0">🏆 ${aw.place} ${aw.cat}</p>`:''}</div>`;
   }
@@ -293,7 +295,7 @@ function rResults(){
     const mine=f.rows.some(x=>x.id===me);
     h+=`<details ${mine?'open':''}><summary>${f.name}${mine?' · you':''}</summary><div class="inner">
       <table><tr><th>Golfer</th><th class="num">Hcp</th><th class="num">Gross</th><th class="num">Net</th><th></th></tr>
-      ${rows.map(x=>`<tr class="${x.id===me?'me':''}"><td>${esc(x.name)}</td><td class="num">${x.ch}</td><td class="num">${x.complete?x.gross:'—'}</td><td class="num">${x.complete?x.net:'—'}</td><td>${aw[x.id]?`<span class="pill">${aw[x.id].place} ${aw[x.id].cat}</span>`:''}</td></tr>`).join('')}</table>
+      ${rows.map(x=>`<tr class="${x.id===me?'me':''}"><td>${esc(x.name)}</td><td class="num">${hcp(x.ch)}</td><td class="num">${x.complete?x.gross:'—'}</td><td class="num">${x.complete?num1(x.net):'—'}</td><td>${aw[x.id]?`<span class="pill">${aw[x.id].place} ${aw[x.id].cat}</span>`:''}</td></tr>`).join('')}</table>
       <h3 style="margin-top:16px">Skins (${f.skinsWon} won${f.skinsWon?`, ${money(f.skinValue)} each`:''})</h3>
       <table>${f.holes.filter(x=>x.winner).map(x=>`<tr class="${x.winner===me?'me':''}"><td>#${x.hole}</td><td>${esc(x.winnerName)} (${x.low})</td></tr>`).join('')||'<tr><td class="muted">No skins won</td></tr>'}</table>
     </div></details>`;
@@ -308,7 +310,7 @@ function myStats(){
     const sc=(w.scores[me]||[]).map(Number), complete=sc.length>=18&&sc.slice(0,18).every(v=>v>0);
     const pay=w.results.payouts[me]||{round:0,skins:0,par3:0,total:0};
     const gross=complete?sc.slice(0,18).reduce((a,b)=>a+b,0):null;
-    rounds.push({date:w.date,gross,net:complete?gross-p.ch:null,ch:p.ch,pay});
+    rounds.push({date:w.date,gross,net:complete?Math.round((gross-p.ch)*10)/10:null,ch:p.ch,pay});
     if(!complete) return;
     for(let h=0;h<18;h++){ const d=sc[h]-w.pars[h];
       dist[d<=-2?'eagle':d===-1?'birdie':d===0?'par':d===1?'bogey':d===2?'double':'worse']++;
@@ -328,14 +330,14 @@ function rMe(){
     <div class="tile"><div class="muted">Avg gross</div><b>${one(avg(done.map(r=>r.gross)))}</b></div>
     <div class="tile"><div class="muted">Best gross</div><b>${bestG??'—'}</b></div>
     <div class="tile"><div class="muted">Avg net</div><b>${one(avg(done.map(r=>r.net)))}</b></div>
-    <div class="tile"><div class="muted">Best net</div><b>${bestN??'—'}</b></div>
-    <div class="tile"><div class="muted">Handicap now</div><b>${rounds.length?rounds[rounds.length-1].ch:'—'}</b></div>
+    <div class="tile"><div class="muted">Best net</div><b>${bestN==null?'—':num1(bestN)}</b></div>
+    <div class="tile"><div class="muted">Handicap now</div><b>${rounds.length?hcp(rounds[rounds.length-1].ch):'—'}</b></div>
   </div>
   <h2>Scoring</h2><div class="card">
     ${D.map(([k,l])=>`<div style="display:flex;justify-content:space-between;margin-top:8px"><span>${l}</span><b>${dist[k]}</b></div><div class="bar"><i style="width:${dist[k]/holes*100}%"></i></div>`).join('')}
     <div class="grid3" style="margin-top:16px">${[3,4,5].map(p=>`<div class="tile"><div class="muted">Avg on par ${p}s</div><b>${one(avg(byPar[p]))}</b></div>`).join('')}</div></div>
   <h2>My rounds</h2><div class="card">${rounds.length?`<table><tr><th>Date</th><th class="num">Gross</th><th class="num">Net</th><th class="num">Won</th></tr>
-    ${[...rounds].reverse().map(r=>`<tr><td>${fmtDate(r.date)}</td><td class="num">${r.gross??'—'}</td><td class="num">${r.net??'—'}</td><td class="num money">${r.pay.total>0.004?money(r.pay.total):''}</td></tr>`).join('')}</table>`:'<p class="muted">No rounds yet.</p>'}</div>
+    ${[...rounds].reverse().map(r=>`<tr><td>${fmtDate(r.date)}</td><td class="num">${r.gross??'—'}</td><td class="num">${r.net==null?'—':num1(r.net)}</td><td class="num money">${r.pay.total>0.004?money(r.pay.total):''}</td></tr>`).join('')}</table>`:'<p class="muted">No rounds yet.</p>'}</div>
   <button class="btn ghost" onclick="showPickName()">Not ${esc(myName().split(' ')[0])}? Change name</button>`;
 }
 
