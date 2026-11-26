@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261126095948';</script>
+<script>window.APP_VERSION='20261126101016';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -536,7 +536,11 @@ async function publishWeek(){
   const c=getCourse(res.courseId), week=JSON.parse(JSON.stringify(db.week)), players={}, scores={};
   weekPlayers().forEach(p=>{ players[p.id]={name:p.name,ch:p.ch,skins:p.skins}; scores[p.id]=week.scores[p.id]||[]; });
   res.flights.forEach(f=>f.rows.forEach(r=>{ if(players[r.id]) players[r.id].flight=f.name; }));
-  const pub={date:res.date,courseName:c.name,pars:c.pars,results:res,players,scores};
+  // Golfers' copy: par 3 carry-over amounts stay on the admin side only (a winner still sees what he won)
+  const pubRes=JSON.parse(JSON.stringify(res));
+  pubRes.par3.forEach(p=>{ p.carryIn=null; p.base=null; if(!p.winner) p.pot=null; });
+  delete pubRes.rollover; delete pubRes.carryInTotal;
+  const pub={date:res.date,courseName:c.name,pars:c.pars,results:pubRes,players,scores};
 
   busy('Publishing…');
   const r1=await sb.from('published_weeks').upsert({league_id:league.id,week_date:res.date,data:pub,published_at:new Date().toISOString()});

@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script>window.APP_VERSION='20261126095948';</script>
+<script>window.APP_VERSION='20261126101016';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -287,8 +287,7 @@ function rResults(){
   const pays=Object.entries(r.payouts).map(([id,p])=>({id,...p})).filter(p=>p.total>0.004).sort((a,b)=>b.total-a.total);
   h+=`<h2>Who won money</h2><div class="card wide"><table><tr><th>Golfer</th><th class="num">Round</th><th class="num">Skins</th><th class="num">Par 3</th><th class="num">Total</th></tr>
     ${pays.map(p=>`<tr class="${p.id===me?'me':''}"><td>${esc(p.name)}</td><td class="num">${p.round?moneyS(p.round):''}</td><td class="num">${p.skins?moneyS(p.skins):''}</td><td class="num">${p.par3?moneyS(p.par3):''}</td><td class="num money">${moneyS(p.total)}</td></tr>`).join('')}</table></div>`;
-  h+=`<h2>Par 3 skins</h2><div class="card"><table>${r.par3.map(p=>`<tr class="${p.winner===me?'me':''}"><td><b>#${p.hole}</b></td><td>${p.winner?`${esc(p.winnerName)} (${p.low})`:`<span class="muted">Tied – rolls over</span>`}</td><td class="num money">${money(p.pot)}</td></tr>`).join('')}</table>
-    ${r.rollover>0.004?`<p class="muted" style="margin-bottom:0">${money(r.rollover)} rolls over to next week.</p>`:''}</div>`;
+  h+=`<h2>Par 3 skins</h2><div class="card"><table>${r.par3.map(p=>`<tr class="${p.winner===me?'me':''}"><td><b>#${p.hole}</b></td><td>${p.winner?`${esc(p.winnerName)} (${p.low})`:`<span class="muted">No skin</span>`}</td><td class="num money">${p.winner&&p.pot!=null?money(p.pot):''}</td></tr>`).join('')}</table></div>`;
   h+='<h2>Flights</h2>';
   r.flights.forEach(f=>{
     const sk=r.mode==='gross'?'gross':'net', rows=[...f.rows].sort((a,b)=>(b.complete-a.complete)||a[sk]-b[sk]), aw=Object.fromEntries(f.awards.map(a=>[a.id,a]));
