@@ -11,7 +11,7 @@
 <meta name="application-name" content="League Admin">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>window.APP_VERSION='20261126075825';</script>
+<script>window.APP_VERSION='20261126081722';</script>
 <script src="update-check.js"></script>
 <script src="config.js"></script>
 <script src="install-steps.js"></script>
@@ -96,6 +96,10 @@
   .pars input{width:100%;text-align:center;padding:8px 0}
   .pars div{text-align:center;font-size:.85rem;color:var(--muted);font-weight:700}
   .print-only{display:none}
+  .linkbtn{background:none;border:0;padding:6px 0;font:inherit;font-weight:700;color:var(--green-dark);cursor:pointer;text-align:left}
+  .linkbtn:hover{text-decoration:underline}
+  .pop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50}
+  .pop .card{max-width:640px;width:100%}
   .status{margin-left:auto;font-weight:700;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.15)}
   .status:empty{display:none}
   .status.ok{background:rgba(255,255,255,.2)}
@@ -140,7 +144,7 @@ const TABS = [
   ['checkin','1. Check-In'],['flights','2. Flights'],['scores','3. Scores'],['results','4. Results'],
   ['roster','Roster'],['history','History'],['settings','Settings']
 ];
-let db, state = {tab:'checkin', search:'', scoreId:null, editCourse:null, viewWeek:null};
+let db, state = {tab:'checkin', search:'', scoreId:null, editCourse:null, viewWeek:null, dir:{q:'',g:'',club:'',r:''}};
 
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function uid(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
@@ -349,9 +353,10 @@ function render(){
   document.getElementById('nav').innerHTML=TABS.map(([k,l])=>`<button class="${state.tab===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
   const c=getCourse(db.week.courseId);
   document.getElementById('hdrInfo').textContent=`${fmtDate(db.week.date)}${c?' · '+c.name:''} · ${Object.keys(db.week.players).length} playing`;
-  const fn={checkin:rCheckin,flights:rFlights,scores:rScores,results:rResults,roster:rRoster,history:rHistory,settings:rSettings}[state.tab];
+  const fn={checkin:rCheckin,flights:rFlights,scores:rScores,results:rResults,roster:rRoster,history:rHistory,settings:rSettings,directory:rDirectory}[state.tab];
   document.getElementById('app').innerHTML=fn();
   if(state.tab==='scores') focusFirstEmpty();
+  if(state.tab==='directory') dirFilter();
 }
 function go(t){ state.tab=t; state.viewWeek=null; render(); window.scrollTo(0,0); }
 function needCourse(){ return `<div class="card empty">First, add your course in <b>Settings</b>.<br><br><button class="btn big" onclick="go('settings')">Go to Settings</button></div>`; }
@@ -692,6 +697,8 @@ function rSettings(){
       <td>${c.pars.map((p,i)=>p===3?`#${i+1}: ${money(carryFor(c,i,'9999-12-31'))}`:'').filter(Boolean).join(' · ')}</td>
       <td style="white-space:nowrap"><button class="btn small" onclick="editCourse('${c.id}')">Edit</button> <button class="btn small danger" onclick="delCourse('${c.id}')">Delete</button></td></tr>`).join('')}</table><br>`:'<p class="muted">No course yet.</p>'}
     <button class="btn big" onclick="editCourse(null)">+ Add Course</button></div>`}
+  <h2>Course Directory</h2><div class="card"><p class="muted" style="margin-top:0">The course's full golfer list, loaded from the pro shop's spreadsheet: search it, see each golfer's contact info, add golfers to the league roster or update their handicap. Only you can see it, never the golfers.</p>
+    <button class="btn big" onclick="openDirectory()">📇 Open Course Directory</button></div>
   <h2>Golfer app</h2><div class="card">
     <label>Web address for golfers</label><div style="font-size:1.4rem;font-weight:800;word-break:break-all;margin-bottom:14px">${esc(golferUrl())}</div>
     <div class="row"><button class="btn big" onclick="printQR()">🖨 Print QR Code Sheet</button><button class="btn big ghost" onclick="window.open(golferUrl(),'_blank')">Open Golfer App</button></div>
@@ -773,6 +780,183 @@ function restore(inp){
     catch(e){ alert('That file is not a Men\'s League backup.'); } };
   r.readAsText(f);
 }
+
+/* ======================= COURSE DIRECTORY ======================= */
+// The course's full golfer list, loaded from the course's spreadsheet (Excel .xlsx or .csv).
+// Stored in its own private table (course_directory), only readable by this league's admin.
+let dir;            // undefined = not loaded yet, null = nothing saved yet, else {file, loadedAt, cols, people}
+let dirErr=false;
+const DIR_SKIP=/^id\b|encrypted|^handle$/i;
+const dget=(p,re)=>{ for(const k in p) if(re.test(k)) return p[k]; return ''; };
+const dName=p=>p._name;
+const dIndex=p=>dget(p,/^(handicap )?index$/i);
+const dClub=p=>dget(p,/affiliation|club/i);
+const dPhone=p=>dget(p,/phone/i);
+const dEmail=p=>dget(p,/e-?mail$/i);
+const dGcn=p=>dget(p,/golf canada/i);
+const dGender=p=>{ const g=String(dget(p,/^gender$|^sex$/i)).toUpperCase(); return g.startsWith('M')?'M':g.startsWith('F')||g.startsWith('W')?'F':''; };
+const normName=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim();
+function dRoster(p){ const gc=String(dGcn(p)||''), n=normName(dName(p));
+  return db.golfers.find(g=>gc&&g.gcn&&String(g.gcn)===gc) || db.golfers.find(g=>normName(g.name)===n); }
+
+async function loadDir(){
+  dirErr=false;
+  const {data,error}=await sb.from('course_directory').select('data').eq('league_id',league.id).maybeSingle();
+  if(error){ console.error(error); dirErr=true; } else dir=data?data.data:null;
+  if(state.tab==='directory') render();
+}
+function openDirectory(){ state.tab='directory'; render(); window.scrollTo(0,0); }
+
+// ---- reading the spreadsheet ----
+async function unzipFile(buf){
+  const dv=new DataView(buf), u8=new Uint8Array(buf), td=new TextDecoder(), out={};
+  let e=-1; for(let i=u8.length-22;i>=Math.max(0,u8.length-70000);i--) if(dv.getUint32(i,true)===0x06054b50){ e=i; break; }
+  if(e<0) throw new Error('not a zip');
+  let p=dv.getUint32(e+16,true); const n=dv.getUint16(e+10,true);
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) break;
+    const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true), nl=dv.getUint16(p+28,true), xl=dv.getUint16(p+30,true), cl=dv.getUint16(p+32,true), lo=dv.getUint32(p+42,true);
+    const name=td.decode(u8.subarray(p+46,p+46+nl)); p+=46+nl+xl+cl;
+    out[name]=async()=>{ const s=lo+30+dv.getUint16(lo+26,true)+dv.getUint16(lo+28,true), raw=u8.subarray(s,s+csize);
+      if(method===0) return td.decode(raw);
+      return await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text(); };
+  }
+  return out;
+}
+async function readXlsx(buf){
+  const z=await unzipFile(buf), xml=async n=>z[n]?new DOMParser().parseFromString(await z[n](),'application/xml'):null;
+  const shared=[]; const sst=await xml('xl/sharedStrings.xml');
+  if(sst) for(const si of sst.getElementsByTagName('si')) shared.push([...si.getElementsByTagName('t')].map(t=>t.textContent).join(''));
+  let sheet='xl/worksheets/sheet1.xml';
+  try{ const wb=await xml('xl/workbook.xml'), rels=await xml('xl/_rels/workbook.xml.rels');
+    const first=wb.getElementsByTagName('sheet')[0], rid=first.getAttribute('r:id')||first.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+    const rel=[...rels.getElementsByTagName('Relationship')].find(r=>r.getAttribute('Id')===rid);
+    if(rel){ const t=rel.getAttribute('Target'); sheet=t.startsWith('/')?t.slice(1):'xl/'+t.replace(/^\.\//,''); } }catch(_){}
+  if(!z[sheet]) sheet=Object.keys(z).find(n=>/^xl\/worksheets\/[^/]+\.xml$/.test(n));
+  const ws=await xml(sheet), rows=[];
+  for(const r of ws.getElementsByTagName('row')){
+    const row=[];
+    for(const c of r.getElementsByTagName('c')){
+      const ref=c.getAttribute('r')||'', letters=(ref.match(/^[A-Z]+/)||[''])[0];
+      let col=row.length; if(letters){ col=0; for(const ch of letters) col=col*26+ch.charCodeAt(0)-64; col--; }
+      const t=c.getAttribute('t'), v=c.getElementsByTagName('v')[0];
+      let val= t==='s'?shared[+(v&&v.textContent)]: t==='inlineStr'?[...c.getElementsByTagName('t')].map(x=>x.textContent).join(''): t==='b'?(v&&v.textContent==='1'?'TRUE':'FALSE'): v?v.textContent:'';
+      row[col]=val??'';
+    }
+    rows.push([...row].map(x=>x??''));
+  }
+  return rows;
+}
+function readCsv(text){
+  const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=ch; }
+    else if(ch==='"') q=true; else if(ch===','){ row.push(cell); cell=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cell); rows.push(row); row=[]; cell=''; }
+    else cell+=ch; }
+  if(cell||row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+function buildDirectory(rows,file){
+  const is=(v,re)=>re.test(String(v||'').trim());
+  let h=rows.findIndex(r=>r.some(v=>is(v,/^first name$/i))&&r.some(v=>is(v,/^last name$/i)));
+  if(h<0) h=rows.findIndex(r=>r.some(v=>is(v,/^(name|golfer|player)$/i)));
+  if(h<0) return null;
+  const hdr=rows[h].map(v=>String(v||'').trim());
+  const fi=hdr.findIndex(v=>/^first name$/i.test(v)), li=hdr.findIndex(v=>/^last name$/i.test(v)), ni=hdr.findIndex(v=>/^(name|golfer|player)$/i.test(v));
+  const cols=hdr.map((name,i)=>({name,i})).filter(c=>c.name&&!DIR_SKIP.test(c.name));
+  const excelDate=v=>{ const d=new Date(Date.UTC(1899,11,30)+(+v)*864e5); return d.toISOString().slice(0,10); };
+  const people=[];
+  for(const r of rows.slice(h+1)){
+    const name=(fi>=0?[r[fi],r[li]].map(x=>String(x||'').trim()).filter(Boolean).join(' '):String(r[ni]||'').trim()).replace(/\s+/g,' ');
+    if(!name) continue;
+    const p={_name:name};
+    for(const c of cols){ let v=String(r[c.i]??'').trim(); if(!v) continue;
+      if(/date|birth/i.test(c.name)&&/^\d{5}(\.\d+)?$/.test(v)) v=excelDate(v);
+      p[c.name]=v; }
+    people.push(p);
+  }
+  people.sort((a,b)=>(dget(a,/^last name$/i)||a._name).localeCompare(dget(b,/^last name$/i)||b._name)||a._name.localeCompare(b._name));
+  return {file,loadedAt:new Date().toISOString(),cols:cols.map(c=>c.name),people};
+}
+async function loadDirFile(inp){
+  const f=inp.files[0]; inp.value=''; if(!f) return;
+  let d=null;
+  try{ const rows=/\.csv$/i.test(f.name)?readCsv(await f.text()):await readXlsx(await f.arrayBuffer()); d=buildDirectory(rows,f.name); }
+  catch(e){ console.error(e); return alert('Could not read that file. Please choose the course\'s Excel spreadsheet (.xlsx) or a .csv file.'); }
+  if(!d||!d.people.length) return alert('Could not find the golfer list in that file. It needs a "First Name" and "Last Name" column (or a "Name" column).');
+  if(!confirm(`Load ${d.people.length} golfers from "${f.name}"?`+(dir?`\n\nThis replaces the list loaded on ${new Date(dir.loadedAt).toLocaleDateString()}. Your league roster is not changed.`:'\n\nYour league roster is not changed.'))) return;
+  setStatus('Saving…');
+  const {error}=await sb.from('course_directory').upsert({league_id:league.id,data:d,updated_at:new Date().toISOString()});
+  if(error){ console.error(error); setStatus('⚠ NOT SAVED – check internet','bad'); return alert('Could not save the directory. Please check the internet and try again.'); }
+  setStatus('✓ Saved','ok');
+  dir=d; render();
+  const on=d.people.filter(dRoster), diff=on.filter(p=>{ const i=parseIndex(dIndex(p)); return i!=null&&i!==dRoster(p).index; });
+  alert(`${d.people.length} golfers loaded.\n\n${on.length} of them are on your league roster`+(diff.length?`, and ${diff.length} of those have a different handicap index than your roster.`:'.'));
+}
+
+// ---- the screen ----
+function rDirectory(){
+  const top=`<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">📇 Course Directory</h2>
+    <button class="btn ghost" onclick="go('settings')">◀ Back to Settings</button></div><br>`;
+  const loadBtn=t=>`<label class="btn big${dir?' ghost':''}" style="display:inline-flex;align-items:center;margin:0;${dir?'color:var(--green);':''}font-size:1.3rem">${t}<input type="file" accept=".xlsx,.csv" style="display:none" onchange="loadDirFile(this)"></label>`;
+  if(dir===undefined){ if(dirErr) return top+`<div class="card empty">Could not open the directory. Please check the internet.<br><br><button class="btn big" onclick="dir=undefined;dirErr=false;loadDir();render()">Try Again</button></div>`;
+    loadDir(); return top+'<div class="card empty">Loading…</div>'; }
+  if(!dir) return top+`<div class="card empty">No course spreadsheet loaded yet.<br><br>Load the course's golfer spreadsheet (the Excel file from the pro shop) to see everyone here.<br><br>${loadBtn('⬆ Load Spreadsheet')}</div>`;
+  const S=state.dir, ppl=dir.people;
+  const clubs=[...new Set(ppl.map(dClub).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const rows=ppl.map((p,i)=>{
+    const g=dRoster(p), idx=parseIndex(dIndex(p)), diff=g&&idx!=null&&idx!==g.index, ph=dPhone(p);
+    const act=!g?`<button class="btn small" onclick="dirAdd(${i})">+ Add to league</button>`
+      :diff?`<button class="btn small ghost" onclick="dirUpdate(${i})">Update handicap ${showIndex(g.index)} → ${showIndex(idx)}</button>`
+      :`<span class="pill yes">✓ In league</span>`;
+    return `<tr data-s="${esc(normName(p._name+' '+dEmail(p))+' '+String(ph).replace(/\D/g,'')+' '+String(dGcn(p)).replace(/\D/g,''))}" data-g="${dGender(p)}" data-c="${esc(dClub(p))}" data-r="${g?1:0}">
+      <td><button class="linkbtn" onclick="dirShow(${i})">${esc(p._name)}</button></td><td class="num">${idx==null?'—':showIndex(idx)}</td>
+      <td>${esc(dClub(p))}</td><td style="white-space:nowrap">${ph?`<a href="tel:${esc(String(ph).replace(/[^\d+]/g,''))}">${esc(ph)}</a>`:''}</td><td style="white-space:nowrap">${act}</td></tr>`;
+  }).join('');
+  return top+`<div class="card"><div class="row" style="justify-content:space-between;align-items:center">
+      <div><b style="font-size:1.3rem">${ppl.length} golfers</b><div class="muted">From “${esc(dir.file)}”, loaded ${new Date(dir.loadedAt).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'})}</div></div>
+      ${loadBtn('⬆ Load Newer Spreadsheet')}</div></div>
+    <div class="card"><input id="dirQ" type="search" style="width:100%" placeholder="🔍  Search by name, email or phone…" value="${esc(S.q)}" oninput="state.dir.q=this.value;dirFilter()">
+      <div class="row" style="margin-top:14px;align-items:center">
+        <div class="seg">${[['','Everyone'],['M','Men'],['F','Women']].map(([k,l])=>`<button class="${S.g===k?'on':''}" onclick="state.dir.g='${k}';dirFilter(true)">${l}</button>`).join('')}</div>
+        <select onchange="state.dir.club=this.value;dirFilter()"><option value="">All clubs</option>${clubs.map(c=>`<option ${S.club===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+        <select onchange="state.dir.r=this.value;dirFilter()">${[['','On roster or not'],['1','On the league roster'],['0','Not on the league roster']].map(([k,l])=>`<option value="${k}" ${S.r===k?'selected':''}>${l}</option>`).join('')}</select>
+        <b id="dirCount" class="muted"></b></div></div>
+    <div class="card"><table id="dirTable"><thead><tr><th>Name</th><th class="num">Index</th><th>Club</th><th>Phone</th><th>League</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function dirFilter(segs){
+  const S=state.dir, q=normName(S.q), qd=S.q.replace(/\D/g,''); let n=0;
+  document.querySelectorAll('#dirTable tbody tr').forEach(tr=>{
+    const ok=(!q||tr.dataset.s.includes(q)||(qd.length>=3&&tr.dataset.s.includes(qd)))&&(!S.g||tr.dataset.g===S.g)&&(!S.club||tr.dataset.c===S.club)&&(!S.r||tr.dataset.r===S.r);
+    tr.style.display=ok?'':'none'; if(ok) n++; });
+  const c=document.getElementById('dirCount'); if(c) c.textContent=`Showing ${n}`;
+  if(segs) document.querySelectorAll('.seg button').forEach((b,i)=>{ b.classList.toggle('on',['','M','F'][i]===S.g); });
+}
+function dirRerender(){ const y=window.scrollY; render(); window.scrollTo(0,y); }
+function dirAdd(i){
+  const p=dir.people[i]; if(dRoster(p)) return;
+  const idx=parseIndex(dIndex(p)), g={id:uid('g'),name:p._name,index:idx,active:true}; const gc=dGcn(p); if(gc) g.gcn=String(gc);
+  db.golfers.push(g); save(); dirClose(); dirRerender();
+}
+function dirUpdate(i){
+  const p=dir.people[i], g=dRoster(p), idx=parseIndex(dIndex(p)); if(!g||idx==null) return;
+  g.index=idx; if(!g.gcn&&dGcn(p)) g.gcn=String(dGcn(p)); if(db.week.flights) db.week.flightsKey='';
+  save(); dirClose(); dirRerender();
+}
+function dirShow(i){
+  const p=dir.people[i], g=dRoster(p), idx=parseIndex(dIndex(p));
+  const val=(k,v)=>/e-?mail$/i.test(k)?`<a href="mailto:${esc(v)}">${esc(v)}</a>`:/phone/i.test(k)?`<a href="tel:${esc(String(v).replace(/[^\d+]/g,''))}">${esc(v)}</a>`:esc(v);
+  const act=!g?`<button class="btn big" onclick="dirAdd(${i})">+ Add to League Roster</button>`
+    :idx!=null&&idx!==g.index?`<button class="btn big" onclick="dirUpdate(${i})">Update Handicap ${showIndex(g.index)} → ${showIndex(idx)}</button>`
+    :`<span class="pill yes" style="font-size:1.05rem">✓ On the league roster</span>`;
+  let el=document.getElementById('dirPop'); if(!el){ el=document.createElement('div'); el.id='dirPop'; el.className='pop noprint'; el.onclick=e=>{ if(e.target===el) dirClose(); }; document.body.appendChild(el); }
+  el.innerHTML=`<div class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">${esc(p._name)}</h2><button class="btn ghost" onclick="dirClose()">✕ Close</button></div>
+    <table style="margin:14px 0">${dir.cols.filter(k=>p[k]).map(k=>`<tr><th style="width:40%">${esc(k)}</th><td>${val(k,p[k])}</td></tr>`).join('')}</table>${act}</div>`;
+  el.style.display='flex';
+}
+function dirClose(){ const el=document.getElementById('dirPop'); if(el) el.style.display='none'; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') dirClose(); });
 
 /* ======================= TEST GOLFERS ======================= */
 const FIRST=['Mike','Dave','Steve','John','Bob','Tom','Jim','Bill','Rick','Paul','Mark','Gary','Larry','Dan','Ken','Ron','Joe','Frank','Pete','Greg'];
@@ -915,8 +1099,8 @@ async function createLeague(name){
 }
 async function openLeague(l){
   if(dirty) await flush();
-  league=l; lsSet('ml.lastLeague',l.id);
-  state={tab:'checkin',search:'',scoreId:null,editCourse:null,viewWeek:null};
+  league=l; lsSet('ml.lastLeague',l.id); dir=undefined; dirErr=false;
+  state={tab:'checkin',search:'',scoreId:null,editCourse:null,viewWeek:null,dir:{q:'',g:'',club:'',r:''}};
   document.querySelector('header h1').textContent='⛳ '+l.name;
   document.title=l.name+' – Admin';
   busy('Opening '+l.name+'…');

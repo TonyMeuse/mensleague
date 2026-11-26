@@ -5,7 +5,7 @@
 create extension if not exists pgcrypto with schema extensions;
 
 -- Remove the earlier single-league setup, if present
-drop table if exists public.push_subs, public.public_roster, public.published_weeks,
+drop table if exists public.course_directory, public.push_subs, public.public_roster, public.published_weeks,
   public.league_secret, public.league_state, public.admins, public.leagues cascade;
 drop function if exists public.is_admin(), public.claim_admin(), public.admin_exists(),
   public.set_league_password(text), public.league_pw_ok(text), public.get_league_data(text),
@@ -43,6 +43,13 @@ create table public.public_roster (
   data jsonb not null
 );
 
+-- Course Directory: the course's full golfer list (admin only)
+create table public.course_directory (
+  league_id uuid primary key references public.leagues on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
 -- Phones that turned on alerts (a phone can follow more than one league)
 create table public.push_subs (
   endpoint text,
@@ -58,11 +65,12 @@ alter table public.league_state    enable row level security;
 alter table public.published_weeks enable row level security;
 alter table public.public_roster   enable row level security;
 alter table public.push_subs       enable row level security;
+alter table public.course_directory enable row level security;
 
 grant select (id, slug, name, owner, created_at), update (name) on public.leagues to authenticated;
-grant select, insert, update, delete on public.league_state, public.published_weeks, public.public_roster to authenticated;
+grant select, insert, update, delete on public.league_state, public.published_weeks, public.public_roster, public.course_directory to authenticated;
 grant select on public.push_subs to authenticated;
-grant all on public.leagues, public.league_state, public.published_weeks, public.public_roster, public.push_subs to service_role;
+grant all on public.leagues, public.league_state, public.published_weeks, public.public_roster, public.push_subs, public.course_directory to service_role;
 
 create function public.is_owner(lid uuid) returns boolean
 language sql stable security definer set search_path = public as $$
@@ -75,6 +83,7 @@ create policy rename_own on public.leagues for update to authenticated using (ow
 create policy own_state on public.league_state for all to authenticated using (public.is_owner(league_id)) with check (public.is_owner(league_id));
 create policy own_weeks on public.published_weeks for all to authenticated using (public.is_owner(league_id)) with check (public.is_owner(league_id));
 create policy own_roster on public.public_roster for all to authenticated using (public.is_owner(league_id)) with check (public.is_owner(league_id));
+create policy own_directory on public.course_directory for all to authenticated using (public.is_owner(league_id)) with check (public.is_owner(league_id));
 create policy own_subs on public.push_subs for select to authenticated using (public.is_owner(league_id));
 
 -- Create a new league owned by the signed-in admin
